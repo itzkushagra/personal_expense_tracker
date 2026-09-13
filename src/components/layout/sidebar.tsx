@@ -14,6 +14,11 @@ import {
   Wallet,
   Menu,
   X,
+  Landmark,
+  PieChart,
+  Target,
+  CalendarClock,
+  BarChart3,
 } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -22,6 +27,11 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/expenses/add", label: "Add Expense", icon: PlusCircle },
+  { href: "/accounts", label: "Accounts", icon: Landmark },
+  { href: "/budgets", label: "Budgets", icon: PieChart },
+  { href: "/goals", label: "Goals", icon: Target },
+  { href: "/bills", label: "Bills", icon: CalendarClock },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/tips", label: "Saving Tips", icon: Lightbulb },
 ];
 
