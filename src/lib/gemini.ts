@@ -33,19 +33,24 @@ Return ONLY the category name, nothing else.`;
 }
 
 export async function parseVoiceInput(
-  text: string
-): Promise<{ amount: number; description: string }> {
-  const prompt = `Extract the expense amount and description from this spoken text. The amount is in Indian Rupees (₹/INR).
+  text: string,
+  today: string
+): Promise<{ amount: number; description: string; date?: string | null }> {
+  const weekday = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", timeZone: "UTC" });
+  const prompt = `Extract the expense amount, description and date from this spoken text. The amount is in Indian Rupees (₹/INR).
+Today is ${weekday}, ${today}. The expense already happened, so the date is today or in the past, never in the future.
+Words like "yesterday", "kal", "last Sunday", "on the 5th", "3 days ago" give the date. If no date is mentioned, use null.
+Leave the date words out of the description.
 
 Spoken text: "${text}"
 
 Return ONLY valid JSON in this exact format, no markdown:
-{"amount": <number>, "description": "<what the expense was for>"}
+{"amount": <number>, "description": "<what the expense was for>", "date": "<YYYY-MM-DD>" or null}
 
-Examples:
-"spent 450 on groceries at BigBazaar" → {"amount": 450, "description": "groceries at BigBazaar"}
-"paid 2000 for electricity bill" → {"amount": 2000, "description": "electricity bill"}
-"auto ride for 80 rupees" → {"amount": 80, "description": "auto ride"}`;
+Examples (today is Tuesday, 2026-11-10):
+"spent 450 on groceries at BigBazaar" → {"amount": 450, "description": "groceries at BigBazaar", "date": null}
+"yesterday paid 2000 for electricity bill" → {"amount": 2000, "description": "electricity bill", "date": "2026-11-09"}
+"auto ride for 80 rupees last Saturday" → {"amount": 80, "description": "auto ride", "date": "2026-11-07"}`;
 
   const result = await geminiModel.generateContent(prompt);
   const responseText = result.response.text().trim();

@@ -88,10 +88,12 @@ export function ExpenseForm({
       const res = await fetch("/api/voice-parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, today: toLocalDateString() }),
       });
       const data = await res.json();
       if (data.amount > 0) setAmount(data.amount.toString());
+      // "yesterday", "last Sunday", "on 5th Nov"... otherwise keep the date as it is.
+      if (typeof data.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) setDate(data.date);
       if (data.description) {
         setDescription(data.description);
         handleCategorize(data.description);

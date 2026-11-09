@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseVoiceInput } from "@/lib/gemini";
+import { todayInAppZone } from "@/lib/dates";
+import { findSpokenDate, isUsableExpenseDate } from "@/lib/spoken-date";
 
 function fallbackParse(text: string): { amount: number; description: string } {
   const normalized = text.toLowerCase().trim();
@@ -67,7 +69,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { text } = await request.json();
+  const { text, today: clientToday } = await request.json();
+  // The browser sends its own local date so "yesterday" matches the user's day.
+  const today = isUsableExpenseDate(clientToday, todayInAppZone()) ? clientToday : todayInAppZone();
 
   if (!text) {
     return NextResponse.json(
@@ -76,15 +80,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Common phrases ("yesterday", "last Sunday", "on 5th Nov") are parsed
+  // exactly; Gemini fills in any other way of saying a date.
+  const spoken = findSpokenDate(text, today);
+  // Without the date words the amount parser can't confuse "5th" with ₹5.
+  let withoutDate = text;
+  if (spoken) {
+    const at = text.toLowerCase().indexOf(spoken.matched);
+    if (at >= 0) withoutDate = `${text.slice(0, at)} ${text.slice(at + spoken.matched.length)}`.replace(/\s+/g, " ").trim();
+  }
+
   try {
-    const parsed = await parseVoiceInput(text);
+    const parsed = await parseVoiceInput(text, today);
     if (parsed.amount > 0) {
-      return NextResponse.json(parsed);
+      const date = spoken?.date ?? (isUsableExpenseDate(parsed.date, today) ? parsed.date : null);
+      return NextResponse.json({ amount: parsed.amount, description: parsed.description, date });
     }
   } catch (error) {
     console.error("Voice parse error:", error);
   }
 
-  const fallback = fallbackParse(text);
-  return NextResponse.json(fallback);
+  const fallback = fallbackParse(withoutDate);
+  return NextResponse.json({ ...fallback, date: spoken?.date ?? null });
 }
