@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { currentMonthInAppZone, monthRange } from "@/lib/dates";
 import { generateTips } from "@/lib/gemini";
 import { outOfPocket } from "@/types";
 
@@ -14,8 +15,9 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const month = parseInt(searchParams.get("month") || String(new Date().getMonth() + 1));
-  const year = parseInt(searchParams.get("year") || String(new Date().getFullYear()));
+  const now = currentMonthInAppZone();
+  const month = parseInt(searchParams.get("month") || String(now.month));
+  const year = parseInt(searchParams.get("year") || String(now.year));
 
   const { data: existing } = await supabase
     .from("monthly_summaries")
@@ -44,8 +46,7 @@ export async function POST(request: NextRequest) {
 
   const { month, year } = await request.json();
 
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0];
+  const { start: startDate, end: endDate } = monthRange(Number(year), Number(month));
 
   const { data: expenses } = await supabase
     .from("expenses")
@@ -78,8 +79,7 @@ export async function POST(request: NextRequest) {
   let comparison = null;
   const prevMonth = month === 1 ? 12 : month - 1;
   const prevYear = month === 1 ? year - 1 : year;
-  const prevStartDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
-  const prevEndDate = new Date(prevYear, prevMonth, 0).toISOString().split("T")[0];
+  const { start: prevStartDate, end: prevEndDate } = monthRange(prevYear, prevMonth);
 
   const { data: prevExpenses } = await supabase
     .from("expenses")

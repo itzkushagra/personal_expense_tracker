@@ -44,7 +44,7 @@ import {
   Briefcase,
   Wallet,
 } from "lucide-react";
-import { formatCurrency, formatDate, daysUntil } from "@/lib/utils";
+import { formatCurrency, formatDate, daysUntil, toLocalDateString } from "@/lib/utils";
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -187,7 +187,7 @@ export default function DashboardPage() {
   const totalBudgetSpent = budgets.reduce((s, b) => s + b.spent, 0);
 
   // Upcoming bills
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = toLocalDateString(now);
   const upcomingBills = bills
     .filter((b) => {
       const diff = Math.ceil((new Date(b.next_due_date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));

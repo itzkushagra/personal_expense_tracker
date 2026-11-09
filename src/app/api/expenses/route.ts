@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { monthRange, todayInAppZone } from "@/lib/dates";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -26,11 +27,8 @@ export async function GET(request: NextRequest) {
     .range(offset, offset + limit - 1);
 
   if (month && year) {
-    const startDate = `${year}-${month.padStart(2, "0")}-01`;
-    const endDate = new Date(parseInt(year), parseInt(month), 0)
-      .toISOString()
-      .split("T")[0];
-    query = query.gte("date", startDate).lte("date", endDate);
+    const { start, end } = monthRange(parseInt(year), parseInt(month));
+    query = query.gte("date", start).lte("date", end);
   }
 
   if (category) {
@@ -57,6 +55,9 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
+  if (!(Number(body.amount) > 0) || !String(body.description || "").trim()) {
+    return NextResponse.json({ error: "Amount and description are required" }, { status: 400 });
+  }
   const {
     amount,
     description,
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
       amount,
       description,
       category: category || "Miscellaneous",
-      date: date || new Date().toISOString().split("T")[0],
+      date: date || todayInAppZone(),
       input_method: input_method || "manual",
       ai_categorized: ai_categorized || false,
       is_reimbursable: !!is_reimbursable,

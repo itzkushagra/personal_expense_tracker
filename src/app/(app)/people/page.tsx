@@ -220,7 +220,8 @@ export default function PeopleLoansPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this record and its full history?")) return;
     try {
-      await fetch(`/api/people-loans/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/people-loans/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       toast.success("Deleted");
       refreshAll();
     } catch {

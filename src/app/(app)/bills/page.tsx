@@ -40,7 +40,7 @@ import {
   EXPENSE_CATEGORIES,
   BILL_FREQUENCY_LABELS,
 } from "@/types";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 
 export default function BillsPage() {
@@ -68,7 +68,7 @@ export default function BillsPage() {
   useEffect(() => { fetchBills(); }, [fetchBills]);
 
   const today = new Date();
-  const todayStr = today.toISOString().split("T")[0];
+  const todayStr = toLocalDateString(today);
   const upcomingBills = bills.filter((b) => {
     const due = new Date(b.next_due_date);
     const diff = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -103,7 +103,8 @@ export default function BillsPage() {
       category: fd.get("category") || "Bills & Utilities",
       frequency: fd.get("frequency") || "monthly",
       due_day: dueDay,
-      next_due_date: fd.get("next_due_date") || nextDue.toISOString().split("T")[0],
+      // toISOString() turned local midnight on the 15th into the 14th in IST.
+      next_due_date: fd.get("next_due_date") || toLocalDateString(nextDue),
       is_auto_pay: fd.get("is_auto_pay") === "on",
       reminder_days_before: parseInt(fd.get("reminder_days_before") as string) || 3,
     };
@@ -173,7 +174,8 @@ export default function BillsPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this bill?")) return;
     try {
-      await fetch(`/api/bills/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/bills/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       toast.success("Bill deleted");
       fetchBills();
     } catch {

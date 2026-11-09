@@ -161,7 +161,8 @@ export default function BudgetsPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this budget?")) return;
     try {
-      await fetch(`/api/budgets/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/budgets/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       toast.success("Budget deleted");
       fetchBudgets();
     } catch {

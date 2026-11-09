@@ -122,7 +122,8 @@ export default function GoalsPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this goal?")) return;
     try {
-      await fetch(`/api/goals/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/goals/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       toast.success("Goal deleted");
       fetchGoals();
     } catch {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { todayInAppZone } from "@/lib/dates";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type LoanDirection, loanBalance, loanEntryTypes } from "@/types";
 
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       user_id: user.id,
       type: kind === "principal" ? types.principal : types.repayment,
       amount: value,
-      date: date || new Date().toISOString().split("T")[0],
+      date: date || todayInAppZone(),
       note: note || "",
     })
     .select()

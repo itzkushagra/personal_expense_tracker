@@ -144,7 +144,8 @@ export default function AccountsPage() {
   async function handleDeleteAccount(id: string) {
     if (!confirm("Delete this account?")) return;
     try {
-      await fetch(`/api/accounts/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/accounts/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       toast.success("Account deleted");
       fetchData();
     } catch {
@@ -186,7 +187,8 @@ export default function AccountsPage() {
   async function handleDeleteDebt(id: string) {
     if (!confirm("Delete this debt?")) return;
     try {
-      await fetch(`/api/debts/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/debts/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
       toast.success("Debt deleted");
       fetchData();
     } catch {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { addDays, addMonths } from "@/lib/dates";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single();
 
   if (bill && create_expense) {
-    await supabase.from("expenses").insert({
+    const { error: expenseError } = await supabase.from("expenses").insert({
       user_id: user.id,
       amount: data.amount_paid,
       description: bill.name,
@@ -54,20 +55,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ai_categorized: false,
       is_recurring: true,
     });
+    // Previously ignored: the payment was saved but the expense silently wasn't.
+    if (expenseError) {
+      await supabase.from("bill_payments").delete().eq("id", data.id).eq("user_id", user.id);
+      return NextResponse.json(
+        { error: `Could not add the payment to expenses: ${expenseError.message}` },
+        { status: 500 }
+      );
+    }
   }
 
   if (bill) {
-    const next = new Date(bill.next_due_date);
-    switch (bill.frequency) {
-      case "weekly": next.setDate(next.getDate() + 7); break;
-      case "monthly": next.setMonth(next.getMonth() + 1); break;
-      case "quarterly": next.setMonth(next.getMonth() + 3); break;
-      case "yearly": next.setFullYear(next.getFullYear() + 1); break;
-    }
+    // Plain date maths: no UTC shift, and 31 Jan + 1 month lands on 28/29 Feb, not 3 Mar.
+    const due: string = bill.next_due_date;
+    const next =
+      bill.frequency === "weekly" ? addDays(due, 7)
+      : bill.frequency === "quarterly" ? addMonths(due, 3)
+      : bill.frequency === "yearly" ? addMonths(due, 12)
+      : addMonths(due, 1);
     await supabase
       .from("bills")
-      .update({ next_due_date: next.toISOString().split("T")[0] })
-      .eq("id", id);
+      .update({ next_due_date: next })
+      .eq("id", id)
+      .eq("user_id", user.id);
   }
 
   return NextResponse.json({ data }, { status: 201 });

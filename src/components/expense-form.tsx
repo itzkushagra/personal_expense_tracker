@@ -32,6 +32,7 @@ import {
   type Expense,
 } from "@/types";
 import { toast } from "sonner";
+import { toLocalDateString } from "@/lib/utils";
 
 interface ExpenseFormProps {
   expense?: Expense;
@@ -46,7 +47,8 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
   const [description, setDescription] = useState(expense?.description || "");
   const [category, setCategory] = useState(expense?.category || "");
   const [date, setDate] = useState(
-    expense?.date || new Date().toISOString().split("T")[0]
+    // Local date: toISOString() gave yesterday's date for anything added before 5:30 AM IST.
+    expense?.date || toLocalDateString()
   );
   const [loading, setLoading] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
@@ -134,17 +136,27 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to save expense");
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || `Server returned ${res.status}`);
+      }
 
+      // The list opens on this month, so say where an entry from another month went.
+      const savedMonth = date.slice(0, 7);
+      const otherMonth = savedMonth !== toLocalDateString().slice(0, 7);
+      const monthName = new Date(`${date}T00:00:00`).toLocaleString("en-IN", { month: "long", year: "numeric" });
       toast.success(
         isSavings
           ? mode === "edit" ? "Savings entry updated" : "Savings entry added"
-          : mode === "edit" ? "Expense updated" : "Expense added"
+          : mode === "edit" ? "Expense updated" : "Expense added",
+        otherMonth ? { description: `Saved under ${monthName}. Pick that month in the filter to see it.` } : undefined
       );
       router.push("/expenses");
       router.refresh();
-    } catch {
-      toast.error("Something went wrong");
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message ? `Couldn't save: ${err.message}` : "Couldn't save the expense"
+      );
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { todayInAppZone } from "@/lib/dates";
 import type { ReimbursementStatus } from "@/types";
 
 const STATUSES: ReimbursementStatus[] = ["pending", "submitted", "reimbursed", "rejected"];
@@ -45,7 +46,7 @@ export async function PATCH(request: NextRequest) {
 
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayInAppZone();
   const results = await Promise.all(
     (expenses || []).map((exp) => {
       const update: Record<string, unknown> = {

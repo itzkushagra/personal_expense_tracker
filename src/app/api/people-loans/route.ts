@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { todayInAppZone } from "@/lib/dates";
 import {
   type LoanDirection,
   type PersonLoan,
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
     user_id: user.id,
     type: loanEntryTypes(direction).principal,
     amount: Number(amount),
-    date: date || new Date().toISOString().split("T")[0],
+    date: date || todayInAppZone(),
     note: note || "",
   });
 

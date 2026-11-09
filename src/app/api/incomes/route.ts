@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { todayInAppZone } from "@/lib/dates";
 
 /** First day of the month containing a YYYY-MM-DD date. */
 function monthStart(date: string) {
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Amount and source are required" }, { status: 400 });
   }
 
-  const day = date || new Date().toISOString().split("T")[0];
+  const day = date || todayInAppZone();
   const { data, error } = await supabase
     .from("incomes")
     .insert({

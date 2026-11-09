@@ -52,6 +52,7 @@ export async function PUT(
     category,
     date,
     ai_categorized: false,
+    updated_at: new Date().toISOString(),
   };
 
   if (is_reimbursable !== undefined) {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateTips } from "@/lib/gemini";
+import { currentMonthInAppZone, monthRange } from "@/lib/dates";
+import { outOfPocket } from "@/types";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -13,11 +15,10 @@ export async function POST(request: NextRequest) {
   }
 
   const { month, year } = await request.json();
-  const m = month || new Date().getMonth() + 1;
-  const y = year || new Date().getFullYear();
-
-  const startDate = `${y}-${String(m).padStart(2, "0")}-01`;
-  const endDate = new Date(y, m, 0).toISOString().split("T")[0];
+  const now = currentMonthInAppZone();
+  const m = Number(month) || now.month;
+  const y = Number(year) || now.year;
+  const { start: startDate, end: endDate } = monthRange(y, m);
 
   const { data: expenses } = await supabase
     .from("expenses")
@@ -32,29 +33,29 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  // Same rules as the dashboard: savings and company-reimbursed spends aren't your spending.
+  const totalSpent = expenses.reduce((sum, e) => sum + outOfPocket(e), 0);
 
   const categoryBreakdown: Record<string, number> = {};
   for (const expense of expenses) {
-    categoryBreakdown[expense.category] =
-      (categoryBreakdown[expense.category] || 0) + Number(expense.amount);
+    const own = outOfPocket(expense);
+    if (own > 0) categoryBreakdown[expense.category] = (categoryBreakdown[expense.category] || 0) + own;
   }
 
   const prevMonth = m === 1 ? 12 : m - 1;
   const prevYear = m === 1 ? y - 1 : y;
-  const prevStartDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
-  const prevEndDate = new Date(prevYear, prevMonth, 0).toISOString().split("T")[0];
+  const { start: prevStartDate, end: prevEndDate } = monthRange(prevYear, prevMonth);
 
   const { data: prevExpenses } = await supabase
     .from("expenses")
-    .select("amount")
+    .select("amount, category, is_reimbursable, reimbursement_status, reimbursed_amount")
     .eq("user_id", user.id)
     .gte("date", prevStartDate)
     .lte("date", prevEndDate);
 
   const prevTotal =
     prevExpenses && prevExpenses.length > 0
-      ? prevExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
+      ? prevExpenses.reduce((sum, e) => sum + outOfPocket(e), 0)
       : null;
 
   try {

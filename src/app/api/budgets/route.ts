@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { currentMonthInAppZone, monthRange } from "@/lib/dates";
 import { outOfPocket } from "@/types";
 
 export async function GET() {
@@ -16,9 +17,9 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  // "This month" in India, even when the server clock runs on UTC.
+  const now = currentMonthInAppZone();
+  const { start: monthStart, end: monthEnd } = monthRange(now.year, now.month);
 
   const { data: expenses } = await supabase
     .from("expenses")
