@@ -120,13 +120,13 @@ export default function IncomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
       toast.success(editing ? "Income updated" : "Income added");
       setShowDialog(false);
       setEditing(null);
       fetchData();
-    } catch {
-      toast.error("Failed to save income");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? `Failed to save income: ${err.message}` : "Failed to save income");
     } finally {
       setSaving(false);
     }
