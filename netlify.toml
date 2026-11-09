@@ -6,6 +6,10 @@
 [build.environment]
   # Next.js 16 needs Node 20.9 or newer.
   NODE_VERSION = "22"
+  # Turbopack's build cache keeps a copy of server-side env values (the Gemini
+  # key). It is never published, so skip only that folder in Netlify's secret
+  # scan; everything that is published is still scanned.
+  SECRETS_SCAN_OMIT_PATHS = ".netlify/.next/cache/**,.next/cache/**"
 
 [functions]
   directory = "netlify/functions"
