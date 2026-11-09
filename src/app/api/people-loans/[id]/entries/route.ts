@@ -74,6 +74,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   return NextResponse.json({ data, balance }, { status: 201 });
 }
 
+/** Body: { entry_id, amount?, date?, note? }. The entry's direction can't change. */
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { entry_id, amount, date, note } = await request.json();
+  if (!entry_id) return NextResponse.json({ error: "entry_id is required" }, { status: 400 });
+  if (amount !== undefined && !(Number(amount) > 0)) {
+    return NextResponse.json({ error: "Amount must be positive" }, { status: 400 });
+  }
+
+  const update: Record<string, unknown> = {};
+  if (amount !== undefined) update.amount = Number(amount);
+  if (date) update.date = date;
+  if (note !== undefined) update.note = note;
+
+  const { data, error } = await supabase
+    .from("held_fund_entries")
+    .update(update)
+    .eq("id", entry_id)
+    .eq("held_fund_id", id)
+    .eq("user_id", user.id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const balance = await syncSettled(supabase, id, user.id);
+  return NextResponse.json({ data, balance });
+}
+
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();

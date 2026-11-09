@@ -24,6 +24,7 @@ import {
   FileText,
   Receipt,
   BellPlus,
+  Trash2,
 } from "lucide-react";
 import {
   type Rental,
@@ -136,6 +137,19 @@ export default function RentPage() {
       toast.error("Failed to save flat details");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (!confirm("Remove your flat details? Rent payments you've logged stay in Expenses.")) return;
+    try {
+      const res = await fetch("/api/rental", { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast.success("Flat details removed");
+      fetchData();
+      fetch("/api/net-worth", { method: "POST" });
+    } catch {
+      toast.error("Failed to remove");
     }
   }
 
@@ -355,9 +369,14 @@ export default function RentPage() {
           <h1 className="text-2xl font-bold">Rent & Home</h1>
           <p className="text-muted-foreground">{rental.address || "Your rented flat"}</p>
         </div>
-        <Button variant="outline" onClick={() => setShowDialog(true)}>
-          <Pencil className="mr-1 h-4 w-4" /> Edit
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowDialog(true)}>
+            <Pencil className="mr-1 h-4 w-4" /> Edit
+          </Button>
+          <Button variant="ghost" className="text-destructive" onClick={handleRemove}>
+            <Trash2 className="mr-1 h-4 w-4" /> Remove
+          </Button>
+        </div>
       </div>
 
       {/* Lease renewal warning */}

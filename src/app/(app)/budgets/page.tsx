@@ -318,7 +318,7 @@ export default function BudgetsPage() {
                   <div className="space-y-2">
                     <Label>Period</Label>
                     <Select name="period" defaultValue={editing?.period || "monthly"}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger><SelectValue>{(v: string) => ({ weekly: "Weekly", monthly: "Monthly", custom: "Custom" } as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="weekly">Weekly</SelectItem>
                         <SelectItem value="monthly">Monthly</SelectItem>

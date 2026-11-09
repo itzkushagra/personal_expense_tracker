@@ -217,12 +217,13 @@ export default function AccountsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(totalAssets)}</div>
-            {adj && (adj.security_deposit > 0 || adj.pending_reimbursements > 0 || adj.owed_to_you > 0) && (
+            {adj && (adj.security_deposit > 0 || adj.pending_reimbursements > 0 || adj.pending_income > 0 || adj.owed_to_you > 0) && (
               <p className="text-xs text-muted-foreground">
                 incl.{" "}
                 {[
                   adj.security_deposit > 0 && `${formatCurrency(adj.security_deposit)} rent deposit`,
                   adj.pending_reimbursements > 0 && `${formatCurrency(adj.pending_reimbursements)} pending claims`,
+                  adj.pending_income > 0 && `${formatCurrency(adj.pending_income)} salary due`,
                   adj.owed_to_you > 0 && `${formatCurrency(adj.owed_to_you)} lent out`,
                 ].filter(Boolean).join(" + ")}
               </p>
@@ -299,7 +300,7 @@ export default function AccountsPage() {
                   <div className="space-y-2">
                     <Label>Type</Label>
                     <Select name="type" defaultValue={editingAccount?.type || "checking"}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger><SelectValue>{(v: string) => (ACCOUNT_TYPE_LABELS as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                       <SelectContent>
                         {(Object.entries(ACCOUNT_TYPE_LABELS) as [AccountType, string][])
                           // Loans live in the Debt Tracker; keep the option only for existing loan accounts.
@@ -394,7 +395,7 @@ export default function AccountsPage() {
                   <div className="space-y-2">
                     <Label>Type</Label>
                     <Select name="type" defaultValue={editingDebt?.type || "personal_loan"}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger><SelectValue>{(v: string) => (DEBT_TYPE_LABELS as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                       <SelectContent>
                         {(Object.entries(DEBT_TYPE_LABELS) as [string, string][]).map(([val, label]) => (
                           <SelectItem key={val} value={val}>{label}</SelectItem>

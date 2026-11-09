@@ -172,7 +172,7 @@ export default function GoalsPage() {
                 <div className="space-y-2">
                   <Label>Priority</Label>
                   <Select name="priority" defaultValue={editing?.priority || "normal"}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue>{(v: string) => ({ emergency: "Emergency Fund", high: "High Priority", normal: "Normal" } as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="emergency">Emergency Fund</SelectItem>
                       <SelectItem value="high">High Priority</SelectItem>

@@ -29,13 +29,26 @@ import { toast } from "sonner";
 
 const ITEMS_PER_PAGE = 20;
 
+// Filter options: this month and the 11 before it ("YYYY-MM"), plus "all".
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => {
+  const d = new Date(new Date().getFullYear(), new Date().getMonth() - i, 1);
+  return {
+    value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    label: i === 0 ? "This Month" : d.toLocaleString("en-IN", { month: "short", year: "numeric" }),
+  };
+});
+const MONTH_LABELS: Record<string, string> = Object.fromEntries([
+  ...MONTH_OPTIONS.map((o) => [o.value, o.label]),
+  ["all", "All Time"],
+]);
+
 export function ExpenseList() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [filterCategory, setFilterCategory] = useState("all");
-  const [filterMonth, setFilterMonth] = useState("current");
+  const [filterMonth, setFilterMonth] = useState(MONTH_OPTIONS[0].value);
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
@@ -47,10 +60,10 @@ export function ExpenseList() {
       params.set("category", filterCategory);
     }
 
-    if (filterMonth === "current") {
-      const now = new Date();
-      params.set("month", String(now.getMonth() + 1));
-      params.set("year", String(now.getFullYear()));
+    if (filterMonth !== "all") {
+      const [y, m] = filterMonth.split("-");
+      params.set("month", String(Number(m)));
+      params.set("year", y);
     }
 
     try {
@@ -89,12 +102,14 @@ export function ExpenseList() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Expenses ({count})</CardTitle>
           <div className="flex gap-2">
-            <Select value={filterMonth} onValueChange={(v) => { setFilterMonth(v ?? "current"); setPage(0); }}>
+            <Select value={filterMonth} onValueChange={(v) => { setFilterMonth(v ?? MONTH_OPTIONS[0].value); setPage(0); }}>
               <SelectTrigger className="w-[130px]">
-                <SelectValue />
+                <SelectValue>{(v: string) => MONTH_LABELS[v] ?? v}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">This Month</SelectItem>
+                {MONTH_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
                 <SelectItem value="all">All Time</SelectItem>
               </SelectContent>
             </Select>

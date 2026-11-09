@@ -37,7 +37,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { type Expense, type Income, CATEGORY_COLORS, outOfPocket } from "@/types";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 
 type TimeRange = "3m" | "6m" | "1y" | "all";
@@ -78,10 +78,10 @@ export default function ReportsPage() {
     monthlyMap[key].total += outOfPocket(exp);
     monthlyMap[key].count++;
   }
+  // Income is grouped by the month it was earned for (salary paid on the 10th counts for the month before).
   for (const inc of incomes) {
-    const d = new Date(inc.date);
-    if (d < cutoffDate) continue;
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = inc.for_month.slice(0, 7);
+    if (`${key}-01` < toLocalDateString(cutoffDate)) continue;
     if (!monthlyMap[key]) monthlyMap[key] = { total: 0, income: 0, count: 0 };
     monthlyMap[key].income += Number(inc.amount);
   }
@@ -184,7 +184,7 @@ export default function ReportsPage() {
           <p className="text-muted-foreground">Understand your spending patterns</p>
         </div>
         <Select value={timeRange} onValueChange={(v) => setTimeRange(v as TimeRange)}>
-          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[140px]"><SelectValue>{(v: string) => ({ "3m": "Last 3 months", "6m": "Last 6 months", "1y": "Last year", all: "All time" } as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
           <SelectContent>
             <SelectItem value="3m">Last 3 months</SelectItem>
             <SelectItem value="6m">Last 6 months</SelectItem>

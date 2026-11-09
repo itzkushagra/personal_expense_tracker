@@ -31,13 +31,15 @@ export const REIMBURSEMENT_STATUS_LABELS: Record<ReimbursementStatus, string> = 
 };
 
 /**
- * The part of an expense that comes out of your own pocket.
+ * The part of an expense that counts as your own spending.
  * Reimbursable expenses count as zero until the claim is rejected, or as the
  * shortfall if the company paid back less than the amount spent.
+ * Investments (SIPs, stocks) are savings, so they count as zero too.
  */
 export function outOfPocket(
-  e: Pick<Expense, "amount" | "is_reimbursable" | "reimbursement_status" | "reimbursed_amount">
+  e: Pick<Expense, "amount" | "category" | "is_reimbursable" | "reimbursement_status" | "reimbursed_amount">
 ): number {
+  if (SAVINGS_CATEGORIES.includes(e.category)) return 0;
   const amount = Number(e.amount);
   if (!e.is_reimbursable || e.reimbursement_status === "rejected") return amount;
   if (e.reimbursement_status === "reimbursed") {
@@ -168,7 +170,11 @@ export interface Income {
   amount: number;
   source: string;
   type: IncomeType;
+  /** Date received (or expected, when is_received is false). */
   date: string;
+  /** First day of the month this income belongs to, e.g. August salary paid in September → "2026-08-01". */
+  for_month: string;
+  is_received: boolean;
   note: string;
   created_at: string;
   updated_at: string;
@@ -369,8 +375,16 @@ export const EXPENSE_CATEGORIES = [
   "Subscriptions",
   "Travel",
   "Gifts",
+  "Personal Care",
+  "Investments",
   "Miscellaneous",
 ] as const;
+
+/**
+ * Money moved into SIPs, stocks, FDs etc. It is recorded like an expense so the
+ * cash trail is complete, but it is savings, not spending.
+ */
+export const SAVINGS_CATEGORIES: readonly string[] = ["Investments"];
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
@@ -397,6 +411,8 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Subscriptions: "#f59e0b",
   Travel: "#06b6d4",
   Gifts: "#e879f9",
+  "Personal Care": "#fb7185",
+  Investments: "#16a34a",
   Miscellaneous: "#94a3b8",
 };
 

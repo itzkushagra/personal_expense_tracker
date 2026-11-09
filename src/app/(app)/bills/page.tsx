@@ -32,6 +32,7 @@ import {
   Clock,
   CreditCard,
   Repeat,
+  X,
 } from "lucide-react";
 import {
   type Bill,
@@ -157,6 +158,18 @@ export default function BillsPage() {
     }
   }
 
+  async function handleDeletePayment(billId: string, paymentId: string) {
+    if (!confirm("Delete this payment record? The matching expense stays in Expenses; delete it there if needed.")) return;
+    try {
+      const res = await fetch(`/api/bills/${billId}/payments?payment_id=${paymentId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setPaymentHistory((prev) => ({ ...prev, [billId]: (prev[billId] || []).filter((p) => p.id !== paymentId) }));
+      toast.success("Payment record deleted");
+    } catch {
+      toast.error("Failed to delete payment");
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this bill?")) return;
     try {
@@ -221,7 +234,7 @@ export default function BillsPage() {
                 <div className="space-y-2">
                   <Label>Frequency</Label>
                   <Select name="frequency" defaultValue={editing?.frequency || "monthly"}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue>{(v: string) => (BILL_FREQUENCY_LABELS as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                     <SelectContent>
                       {(Object.entries(BILL_FREQUENCY_LABELS) as [string, string][]).map(([val, label]) => (
                         <SelectItem key={val} value={val}>{label}</SelectItem>
@@ -385,6 +398,13 @@ export default function BillsPage() {
                                   <Badge variant={p.status === "paid" ? "secondary" : "destructive"} className="text-xs">
                                     {p.status}
                                   </Badge>
+                                  <button
+                                    className="text-muted-foreground hover:text-destructive"
+                                    onClick={() => handleDeletePayment(bill.id, p.id)}
+                                    aria-label="Delete payment"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
                                 </div>
                               </div>
                             ))}

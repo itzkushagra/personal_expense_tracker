@@ -11,6 +11,8 @@ export interface NetWorthBreakdown {
   adjustments: {
     security_deposit: number;
     pending_reimbursements: number;
+    /** Earned income not received yet (e.g. salary due with F&F). */
+    pending_income: number;
     /** Held for, or borrowed from, friends & family. */
     owed_by_you: number;
     /** Lent to friends & family. */
@@ -22,7 +24,7 @@ export interface NetWorthBreakdown {
 }
 
 export async function computeNetWorth(supabase: SupabaseClient, userId: string): Promise<NetWorthBreakdown> {
-  const [{ data: accounts }, { data: rental }, { data: loans }, { data: debts }, { data: claims }] = await Promise.all([
+  const [{ data: accounts }, { data: rental }, { data: loans }, { data: debts }, { data: claims }, { data: pendingIncome }] = await Promise.all([
     supabase.from("accounts").select("name, type, balance").eq("user_id", userId).eq("is_active", true),
     supabase.from("rentals").select("security_deposit").eq("user_id", userId).maybeSingle(),
     supabase
@@ -37,6 +39,7 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
       .eq("user_id", userId)
       .eq("is_reimbursable", true)
       .in("reimbursement_status", ["pending", "submitted"]),
+    supabase.from("incomes").select("amount").eq("user_id", userId).eq("is_received", false),
   ]);
 
   const breakdown: Record<string, number> = {};
@@ -62,6 +65,13 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
   if (claimsDue > 0) {
     breakdown["Pending reimbursements"] = claimsDue;
     totalAssets += claimsDue;
+  }
+
+  // Salary / F&F you've earned but not received yet.
+  const incomeDue = (pendingIncome || []).reduce((s, i) => s + Number(i.amount), 0);
+  if (incomeDue > 0) {
+    breakdown["Income still to receive"] = incomeDue;
+    totalAssets += incomeDue;
   }
 
   // Debt Tracker entries (EMIs, personal loans, credit cards) are liabilities.
@@ -106,6 +116,7 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     adjustments: {
       security_deposit: deposit,
       pending_reimbursements: claimsDue,
+      pending_income: incomeDue,
       owed_by_you: owedByYou,
       owed_to_you: owedToYou,
       tracked_debt: trackedDebt,

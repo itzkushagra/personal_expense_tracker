@@ -72,3 +72,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   return NextResponse.json({ data }, { status: 201 });
 }
+
+// Removes a payment record (?payment_id=). Any expense it created stays in Expenses and can be deleted there.
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const paymentId = new URL(request.url).searchParams.get("payment_id");
+  if (!paymentId) return NextResponse.json({ error: "payment_id is required" }, { status: 400 });
+
+  const { error } = await supabase
+    .from("bill_payments")
+    .delete()
+    .eq("id", paymentId)
+    .eq("bill_id", id)
+    .eq("user_id", user.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}

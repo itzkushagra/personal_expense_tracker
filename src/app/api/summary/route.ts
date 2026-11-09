@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
   const { data: prevExpenses } = await supabase
     .from("expenses")
-    .select("amount, is_reimbursable, reimbursement_status, reimbursed_amount")
+    .select("amount, category, is_reimbursable, reimbursement_status, reimbursed_amount")
     .eq("user_id", user.id)
     .gte("date", prevStartDate)
     .lte("date", prevEndDate);

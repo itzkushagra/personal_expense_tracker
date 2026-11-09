@@ -22,6 +22,7 @@ import {
   Clock,
   Undo2,
   PlusCircle,
+  Pencil,
 } from "lucide-react";
 import {
   type Expense,
@@ -281,6 +282,9 @@ export default function ReimbursementsPage() {
                       <p className="text-xs text-destructive">got {formatCurrency(Number(c.reimbursed_amount))}</p>
                     )}
                   </div>
+                  <Link href={`/expenses/${c.id}/edit`} aria-label="Edit expense" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Link>
                 </label>
               ))}
             </div>

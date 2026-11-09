@@ -86,6 +86,7 @@ export default function PeopleLoansPage() {
   const [entryNote, setEntryNote] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showSettled, setShowSettled] = useState(false);
+  const [editEntry, setEditEntry] = useState<{ loanId: string; id: string; amount: string; date: string; note: string } | null>(null);
 
   const fetchLoans = useCallback(async () => {
     setLoading(true);
@@ -182,6 +183,25 @@ export default function PeopleLoansPage() {
       refreshAll();
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
+    }
+  }
+
+  async function handleUpdateEntry() {
+    if (!editEntry) return;
+    const amount = parseFloat(editEntry.amount);
+    if (!amount || amount <= 0) return;
+    try {
+      const res = await fetch(`/api/people-loans/${editEntry.loanId}/entries`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entry_id: editEntry.id, amount, date: editEntry.date, note: editEntry.note }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
+      toast.success("Entry updated");
+      setEditEntry(null);
+      refreshAll();
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update entry");
     }
   }
 
@@ -312,7 +332,19 @@ export default function PeopleLoansPage() {
 
           {isOpen && (
             <div className="space-y-1.5 border-t pt-3">
-              {loan.entries.map((entry) => (
+              {loan.entries.map((entry) => editEntry?.id === entry.id ? (
+                <div key={entry.id} className="space-y-2 rounded-lg border p-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input type="number" className="h-8" value={editEntry.amount} onChange={(e) => setEditEntry({ ...editEntry, amount: e.target.value })} aria-label="Amount" />
+                    <Input type="date" className="h-8" value={editEntry.date} onChange={(e) => setEditEntry({ ...editEntry, date: e.target.value })} aria-label="Date" />
+                  </div>
+                  <Input className="h-8" placeholder="Note" value={editEntry.note} onChange={(e) => setEditEntry({ ...editEntry, note: e.target.value })} />
+                  <div className="flex gap-2">
+                    <Button size="sm" className="h-7 flex-1" onClick={handleUpdateEntry}>Save</Button>
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditEntry(null)}>Cancel</Button>
+                  </div>
+                </div>
+              ) : (
                 <div key={entry.id} className="flex items-center gap-2 text-sm">
                   {entry.type === "in" ? (
                     <ArrowDownLeft className="h-3.5 w-3.5 shrink-0 text-blue-600" />
@@ -326,6 +358,13 @@ export default function PeopleLoansPage() {
                   <span className={entry.type === "in" ? "text-blue-600" : "text-orange-600"}>
                     {entry.type === "in" ? "+" : "−"}{formatCurrency(Number(entry.amount))}
                   </span>
+                  <button
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setEditEntry({ loanId: loan.id, id: entry.id, amount: String(entry.amount), date: entry.date, note: entry.note })}
+                    aria-label="Edit entry"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
                   <button className="text-muted-foreground hover:text-destructive" onClick={() => handleDeleteEntry(loan.id, entry.id)} aria-label="Delete entry">
                     <X className="h-3 w-3" />
                   </button>
@@ -386,7 +425,7 @@ export default function PeopleLoansPage() {
                 <div className="space-y-2">
                   <Label>Relation</Label>
                   <Select name="relation" defaultValue={editing?.relation || "friend"}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue>{(v: string) => (PERSON_RELATION_LABELS as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                     <SelectContent>
                       {Object.entries(PERSON_RELATION_LABELS).map(([value, label]) => (
                         <SelectItem key={value} value={value}>{label}</SelectItem>

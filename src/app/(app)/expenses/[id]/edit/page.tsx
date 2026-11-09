@@ -14,12 +14,9 @@ export default function EditExpensePage() {
   useEffect(() => {
     async function fetchExpense() {
       try {
-        const res = await fetch(`/api/expenses?limit=1000`);
+        const res = await fetch(`/api/expenses/${params.id}`);
         const json = await res.json();
-        const found = (json.data || []).find(
-          (e: Expense) => e.id === params.id
-        );
-        setExpense(found || null);
+        setExpense((json.data as Expense) || null);
       } catch {
         // handled below
       } finally {
