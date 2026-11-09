@@ -97,7 +97,7 @@ export function findSpokenDate(text: string, today: string): SpokenDate | null {
   let m: RegExpMatchArray | null;
 
   // "day before yesterday" / "parso" (before "yesterday")
-  if ((m = t.match(/\b(day before yesterday|parso|parson)\b/))) {
+  if ((m = t.match(/\b((?:the\s+)?(?:day|evening|night|morning|afternoon)\s+before\s+yesterday|parso|parson)\b/))) {
     return { date: addDays(today, -2), matched: m[0] };
   }
   // "yesterday" / "kal" (in a spent-money sentence, kal means yesterday)

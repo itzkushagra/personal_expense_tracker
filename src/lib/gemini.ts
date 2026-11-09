@@ -3,8 +3,14 @@ import { EXPENSE_CATEGORIES } from "@/types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
+// gemini-2.0-flash-lite was retired by Google (404 "no longer available"),
+// which silently pushed categorising, voice parsing and tips onto the keyword
+// fallbacks. GEMINI_MODEL lets you switch models from Netlify without a code
+// change the next time one is retired.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+
 export const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash-lite",
+  model: GEMINI_MODEL,
 });
 
 export async function categorizeExpense(
