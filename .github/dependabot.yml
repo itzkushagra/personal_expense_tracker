@@ -1,0 +1,31 @@
+# Weekly dependency check. GitHub opens a pull request when a package has an
+# update, and immediately (outside this schedule) for any security advisory.
+# Netlify builds each pull request, so a broken update never reaches the live
+# site unless it's merged.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    groups:
+      # Framework packages move together so they stay compatible.
+      next-react:
+        patterns: ["next", "eslint-config-next", "react", "react-dom", "@types/react", "@types/react-dom"]
+      supabase:
+        patterns: ["@supabase/*"]
+      # Everything else: minor and patch updates in one weekly PR.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Major versions change APIs; take them deliberately, not automatically.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
