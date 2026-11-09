@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -47,9 +46,11 @@ interface ExpenseListProps {
   refreshKey?: number;
   /** Opens the add-expense dialog from the empty state. */
   onAdd?: () => void;
+  /** Opens the edit dialog for an expense. */
+  onEdit?: (expense: Expense) => void;
 }
 
-export function ExpenseList({ refreshKey = 0, onAdd }: ExpenseListProps) {
+export function ExpenseList({ refreshKey = 0, onAdd, onEdit }: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -200,11 +201,15 @@ export function ExpenseList({ refreshKey = 0, onAdd }: ExpenseListProps) {
                     {formatCurrency(expense.amount)}
                   </span>
                   <div className="flex shrink-0 gap-1">
-                    <Link href={`/expenses/${expense.id}/edit`}>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label="Edit expense"
+                      onClick={() => onEdit?.(expense)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"

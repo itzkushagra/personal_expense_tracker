@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +31,7 @@ import {
 } from "@/types";
 import { cn, formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
 import { toast } from "sonner";
+import { ExpenseDialog } from "@/components/expense-dialog";
 
 const TABS: ReimbursementStatus[] = ["pending", "submitted", "reimbursed", "rejected"];
 
@@ -42,6 +42,9 @@ export default function ReimbursementsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState<ReimbursementStatus | null>(null);
   const [saving, setSaving] = useState(false);
+  // Add/edit pop-up (same one the Expenses page uses).
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const fetchClaims = useCallback(async () => {
     setLoading(true);
@@ -138,9 +141,9 @@ export default function ReimbursementsPage() {
           <h1 className="text-2xl font-bold">Reimbursements</h1>
           <p className="text-muted-foreground">Office expenses you paid for that your company will pay back</p>
         </div>
-        <Link href="/expenses?add=1">
-          <Button><PlusCircle className="mr-1 h-4 w-4" /> Add Expense</Button>
-        </Link>
+        <Button onClick={() => { setEditingExpense(null); setExpenseOpen(true); }}>
+          <PlusCircle className="mr-1 h-4 w-4" /> Add Expense
+        </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -282,9 +285,20 @@ export default function ReimbursementsPage() {
                       <p className="text-xs text-destructive">got {formatCurrency(Number(c.reimbursed_amount))}</p>
                     )}
                   </div>
-                  <Link href={`/expenses/${c.id}/edit`} aria-label="Edit expense" className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                  <button
+                    type="button"
+                    aria-label="Edit expense"
+                    className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    onClick={(e) => {
+                      // The row is a <label>; don't toggle its checkbox.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingExpense(c);
+                      setExpenseOpen(true);
+                    }}
+                  >
                     <Pencil className="h-3.5 w-3.5" />
-                  </Link>
+                  </button>
                 </label>
               ))}
             </div>
@@ -335,6 +349,13 @@ export default function ReimbursementsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      <ExpenseDialog
+        open={expenseOpen}
+        onOpenChange={setExpenseOpen}
+        expense={editingExpense}
+        defaultReimbursable
+        onSaved={fetchClaims}
+      />
     </div>
   );
 }

@@ -43,6 +43,8 @@ interface ExpenseFormProps {
   onSaved?: () => void;
   /** Called on Cancel instead of going back a page. */
   onCancel?: () => void;
+  /** Pre-tick "Company will reimburse this" when adding. */
+  defaultReimbursable?: boolean;
 }
 
 export function ExpenseForm({
@@ -51,6 +53,7 @@ export function ExpenseForm({
   inDialog = false,
   onSaved,
   onCancel,
+  defaultReimbursable = false,
 }: ExpenseFormProps) {
   const router = useRouter();
   const { isListening, transcript, error: speechError, startListening, stopListening, isSupported } = useSpeech();
@@ -68,7 +71,7 @@ export function ExpenseForm({
   const [inputMethod, setInputMethod] = useState<"manual" | "voice">(
     expense?.input_method || "manual"
   );
-  const [isReimbursable, setIsReimbursable] = useState(expense?.is_reimbursable || false);
+  const [isReimbursable, setIsReimbursable] = useState(expense ? !!expense.is_reimbursable : defaultReimbursable);
   const [claimReference, setClaimReference] = useState(expense?.claim_reference || "");
   const isSavings = isSavingsCategory(category);
 
