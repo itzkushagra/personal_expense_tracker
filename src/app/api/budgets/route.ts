@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { pick, WRITABLE } from "@/lib/api-fields";
 import { currentMonthInAppZone, monthRange } from "@/lib/dates";
 import { outOfPocket } from "@/types";
 
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { data, error } = await supabase
     .from("budgets")
-    .insert({ ...body, user_id: user.id })
+    .insert({ ...pick(body, WRITABLE.budgets), user_id: user.id })
     .select()
     .single();
 

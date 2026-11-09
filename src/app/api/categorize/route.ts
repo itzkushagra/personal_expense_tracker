@@ -14,7 +14,11 @@ export async function POST(request: NextRequest) {
 
   const { description } = await request.json();
 
-  if (!description) {
+  // Every call spends Gemini quota on your key: accept only short text.
+  if (typeof description === "string" && description.length > 300) {
+    return NextResponse.json({ error: "Description is too long (max 300 characters)" }, { status: 400 });
+  }
+  if (!description || typeof description !== "string") {
     return NextResponse.json(
       { error: "Description is required" },
       { status: 400 }

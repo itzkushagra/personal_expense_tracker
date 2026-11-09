@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { pick, WRITABLE } from "@/lib/api-fields";
 
 export async function GET() {
   const supabase = await createClient();
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { data, error } = await supabase
     .from("bills")
-    .insert({ ...body, user_id: user.id })
+    .insert({ ...pick(body, WRITABLE.bills), user_id: user.id })
     .select()
     .single();
 

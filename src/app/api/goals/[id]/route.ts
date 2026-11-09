@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { pick, WRITABLE } from "@/lib/api-fields";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,7 +9,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const updates: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() };
+  const updates: Record<string, unknown> = { ...pick(body, WRITABLE.goals), updated_at: new Date().toISOString() };
 
   if (body.current_amount !== undefined && body.target_amount !== undefined) {
     updates.is_completed = Number(body.current_amount) >= Number(body.target_amount);

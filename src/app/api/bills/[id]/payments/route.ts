@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { pick, WRITABLE } from "@/lib/api-fields";
 import { addDays, addMonths } from "@/lib/dates";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -29,9 +30,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // create_expense (default true) also records the payment as an expense, so
   // marking a bill paid shows up in spending and budgets without a second entry.
   const { create_expense = true, ...body } = await request.json();
+
+  // The bill must be the caller's own: row security alone would let a payment
+  // row point at someone else's bill id.
+  const { data: owned } = await supabase.from("bills").select("id").eq("id", id).eq("user_id", user.id).maybeSingle();
+  if (!owned) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+
   const { data, error } = await supabase
     .from("bill_payments")
-    .insert({ ...body, bill_id: id, user_id: user.id })
+    .insert({ ...pick(body, WRITABLE.bill_payments), bill_id: id, user_id: user.id })
     .select()
     .single();
 

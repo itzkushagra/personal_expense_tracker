@@ -73,7 +73,11 @@ export async function POST(request: NextRequest) {
   // The browser sends its own local date so "yesterday" matches the user's day.
   const today = isUsableExpenseDate(clientToday, todayInAppZone()) ? clientToday : todayInAppZone();
 
-  if (!text) {
+  // Every call spends Gemini quota on your key: accept only a short sentence.
+  if (typeof text === "string" && text.length > 500) {
+    return NextResponse.json({ error: "Text is too long (max 500 characters)" }, { status: 400 });
+  }
+  if (!text || typeof text !== "string") {
     return NextResponse.json(
       { error: "Text is required" },
       { status: 400 }
