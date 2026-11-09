@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import type { HeldFund, HeldFundEntry, HeldFundWithBalance } from "@/types";
+import {
+  type LoanDirection,
+  type PersonLoan,
+  type PersonLoanEntry,
+  type PersonLoanWithBalance,
+  loanBalance,
+  loanEntryTypes,
+} from "@/types";
+
+const DIRECTIONS: LoanDirection[] = ["holding", "borrowed", "lent"];
 
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: funds, error } = await supabase
+  const { data: loans, error } = await supabase
     .from("held_funds")
     .select("*, entries:held_fund_entries(*)")
     .eq("user_id", user.id)
@@ -16,11 +25,9 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const data: HeldFundWithBalance[] = (funds || []).map((f: HeldFund & { entries: HeldFundEntry[] }) => {
-    const entries = [...(f.entries || [])].sort((a, b) => b.date.localeCompare(a.date));
-    const total_received = entries.filter((e) => e.type === "received").reduce((s, e) => s + Number(e.amount), 0);
-    const total_returned = entries.filter((e) => e.type === "returned").reduce((s, e) => s + Number(e.amount), 0);
-    return { ...f, entries, total_received, total_returned, balance: total_received - total_returned };
+  const data: PersonLoanWithBalance[] = (loans || []).map((l: PersonLoan & { entries: PersonLoanEntry[] }) => {
+    const entries = [...(l.entries || [])].sort((a, b) => b.date.localeCompare(a.date));
+    return { ...l, entries, ...loanBalance(l.direction, entries) };
   });
 
   return NextResponse.json({ data });
@@ -31,14 +38,22 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { amount, date, note, ...fund } = await request.json();
-  if (!fund.person_name || !(Number(amount) > 0)) {
-    return NextResponse.json({ error: "Person and a positive amount are required" }, { status: 400 });
+  const { amount, date, note, person_name, relation, direction, purpose, expected_return_date } =
+    await request.json();
+  if (!person_name || !(Number(amount) > 0) || !DIRECTIONS.includes(direction)) {
+    return NextResponse.json({ error: "Person, type and a positive amount are required" }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("held_funds")
-    .insert({ ...fund, user_id: user.id })
+    .insert({
+      user_id: user.id,
+      person_name,
+      relation: relation || "friend",
+      direction,
+      purpose: purpose || "",
+      expected_return_date: expected_return_date || null,
+    })
     .select()
     .single();
 
@@ -47,7 +62,7 @@ export async function POST(request: NextRequest) {
   const { error: entryError } = await supabase.from("held_fund_entries").insert({
     held_fund_id: data.id,
     user_id: user.id,
-    type: "received",
+    type: loanEntryTypes(direction).principal,
     amount: Number(amount),
     date: date || new Date().toISOString().split("T")[0],
     note: note || "",

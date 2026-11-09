@@ -1,65 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { type LoanDirection, loanBalance, loanEntryTypes } from "@/types";
 
-async function getBalance(supabase: SupabaseClient, fundId: string, userId: string) {
+async function getLoan(supabase: SupabaseClient, id: string, userId: string) {
   const { data } = await supabase
-    .from("held_fund_entries")
-    .select("type, amount")
-    .eq("held_fund_id", fundId)
-    .eq("user_id", userId);
-  return (data || []).reduce(
-    (s, e) => s + (e.type === "received" ? Number(e.amount) : -Number(e.amount)),
-    0
-  );
+    .from("held_funds")
+    .select("id, direction, entries:held_fund_entries(type, amount)")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data as { id: string; direction: LoanDirection; entries: { type: "in" | "out"; amount: number }[] } | null;
 }
 
-async function syncSettled(supabase: SupabaseClient, fundId: string, userId: string) {
-  const balance = await getBalance(supabase, fundId, userId);
+async function syncSettled(supabase: SupabaseClient, id: string, userId: string) {
+  const loan = await getLoan(supabase, id, userId);
+  if (!loan) return 0;
+  const { balance } = loanBalance(loan.direction, loan.entries);
   await supabase
     .from("held_funds")
     .update({ is_settled: balance <= 0, updated_at: new Date().toISOString() })
-    .eq("id", fundId)
+    .eq("id", id)
     .eq("user_id", userId);
   return balance;
 }
 
+/**
+ * Body: { kind: "principal" | "repayment", amount, date?, note? }
+ * principal = more money added to the record; repayment = paying back / being paid back.
+ */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { type, amount, date, note } = await request.json();
+  const { kind, amount, date, note } = await request.json();
   const value = Number(amount);
-  if ((type !== "received" && type !== "returned") || !(value > 0)) {
+  if ((kind !== "principal" && kind !== "repayment") || !(value > 0)) {
     return NextResponse.json({ error: "Invalid entry" }, { status: 400 });
   }
 
-  const { data: fund } = await supabase
-    .from("held_funds")
-    .select("id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!fund) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const loan = await getLoan(supabase, id, user.id);
+  if (!loan) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (type === "returned") {
-    const balance = await getBalance(supabase, id, user.id);
+  if (kind === "repayment") {
+    const { balance } = loanBalance(loan.direction, loan.entries);
     if (value > balance + 0.005) {
       return NextResponse.json(
-        { error: `You only hold ₹${balance.toLocaleString("en-IN")} for this person` },
+        { error: `Only ₹${balance.toLocaleString("en-IN")} is outstanding` },
         { status: 400 }
       );
     }
   }
 
+  const types = loanEntryTypes(loan.direction);
   const { data, error } = await supabase
     .from("held_fund_entries")
     .insert({
       held_fund_id: id,
       user_id: user.id,
-      type,
+      type: kind === "principal" ? types.principal : types.repayment,
       amount: value,
       date: date || new Date().toISOString().split("T")[0],
       note: note || "",

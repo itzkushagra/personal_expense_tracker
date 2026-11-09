@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { reimbursementDue } from "@/types";
+import { type LoanDirection, loanBalance, reimbursementDue } from "@/types";
 
 export interface NetWorthBreakdown {
   total_assets: number;
@@ -11,16 +11,26 @@ export interface NetWorthBreakdown {
   adjustments: {
     security_deposit: number;
     pending_reimbursements: number;
-    held_for_others: number;
+    /** Held for, or borrowed from, friends & family. */
+    owed_by_you: number;
+    /** Lent to friends & family. */
+    owed_to_you: number;
+    /** Active Debt Tracker balances not already counted as accounts. */
+    tracked_debt: number;
   };
   account_count: number;
 }
 
 export async function computeNetWorth(supabase: SupabaseClient, userId: string): Promise<NetWorthBreakdown> {
-  const [{ data: accounts }, { data: rental }, { data: heldEntries }, { data: claims }] = await Promise.all([
+  const [{ data: accounts }, { data: rental }, { data: loans }, { data: debts }, { data: claims }] = await Promise.all([
     supabase.from("accounts").select("name, type, balance").eq("user_id", userId).eq("is_active", true),
     supabase.from("rentals").select("security_deposit").eq("user_id", userId).maybeSingle(),
-    supabase.from("held_fund_entries").select("type, amount").eq("user_id", userId),
+    supabase
+      .from("held_funds")
+      .select("direction, entries:held_fund_entries(type, amount)")
+      .eq("user_id", userId)
+      .eq("is_settled", false),
+    supabase.from("debts").select("name, current_balance").eq("user_id", userId).eq("is_active", true),
     supabase
       .from("expenses")
       .select("amount, is_reimbursable, reimbursement_status")
@@ -54,17 +64,38 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     totalAssets += claimsDue;
   }
 
-  // Money friends/family left with you sits in your accounts but isn't yours.
-  const heldForOthers = Math.max(
-    0,
-    (heldEntries || []).reduce(
-      (s, e) => s + (e.type === "received" ? Number(e.amount) : -Number(e.amount)),
-      0
-    )
-  );
-  if (heldForOthers > 0) {
-    breakdown["Held for others"] = -heldForOthers;
-    totalLiabilities += heldForOthers;
+  // Debt Tracker entries (EMIs, personal loans, credit cards) are liabilities.
+  // Credit-card accounts already carry their own balance, so only count tracked
+  // debts by name when no account of the same name exists.
+  const accountNames = new Set((accounts || []).map((a) => a.name.trim().toLowerCase()));
+  let trackedDebt = 0;
+  for (const d of debts || []) {
+    if (accountNames.has(d.name.trim().toLowerCase())) continue;
+    const bal = Math.max(0, Number(d.current_balance));
+    if (bal > 0) {
+      breakdown[`Debt: ${d.name}`] = -bal;
+      trackedDebt += bal;
+    }
+  }
+  totalLiabilities += trackedDebt;
+
+  // People & Loans: money you hold for / borrowed from others is a liability,
+  // money you lent out is an asset.
+  let owedByYou = 0;
+  let owedToYou = 0;
+  for (const l of (loans || []) as { direction: LoanDirection; entries: { type: "in" | "out"; amount: number }[] }[]) {
+    const { balance } = loanBalance(l.direction, l.entries || []);
+    if (balance <= 0) continue;
+    if (l.direction === "lent") owedToYou += balance;
+    else owedByYou += balance;
+  }
+  if (owedByYou > 0) {
+    breakdown["Owed to friends & family"] = -owedByYou;
+    totalLiabilities += owedByYou;
+  }
+  if (owedToYou > 0) {
+    breakdown["Lent to friends & family"] = owedToYou;
+    totalAssets += owedToYou;
   }
 
   return {
@@ -75,7 +106,9 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     adjustments: {
       security_deposit: deposit,
       pending_reimbursements: claimsDue,
-      held_for_others: heldForOthers,
+      owed_by_you: owedByYou,
+      owed_to_you: owedToYou,
+      tracked_debt: trackedDebt,
     },
     account_count: (accounts || []).length,
   };

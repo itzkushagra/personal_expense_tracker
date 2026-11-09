@@ -36,7 +36,7 @@ import {
   BarChart3,
   DollarSign,
 } from "lucide-react";
-import { type Expense, CATEGORY_COLORS, outOfPocket } from "@/types";
+import { type Expense, type Income, CATEGORY_COLORS, outOfPocket } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -44,15 +44,17 @@ type TimeRange = "3m" | "6m" | "1y" | "all";
 
 export default function ReportsPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>("6m");
 
   const fetchExpenses = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/expenses?limit=5000");
-      const json = await res.json();
+      const [res, incRes] = await Promise.all([fetch("/api/expenses?limit=5000"), fetch("/api/incomes")]);
+      const [json, incJson] = await Promise.all([res.json(), incRes.json()]);
       setExpenses(json.data || []);
+      setIncomes(incJson.data || []);
     } catch {
       toast.error("Failed to load data");
     } finally {
@@ -76,11 +78,19 @@ export default function ReportsPage() {
     monthlyMap[key].total += outOfPocket(exp);
     monthlyMap[key].count++;
   }
+  for (const inc of incomes) {
+    const d = new Date(inc.date);
+    if (d < cutoffDate) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!monthlyMap[key]) monthlyMap[key] = { total: 0, income: 0, count: 0 };
+    monthlyMap[key].income += Number(inc.amount);
+  }
   const monthlyTrends = Object.entries(monthlyMap)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, data]) => ({
       month: new Date(month + "-01").toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
       spending: Math.round(data.total),
+      income: data.income > 0 ? Math.round(data.income) : null,
       transactions: data.count,
     }));
 
@@ -118,6 +128,7 @@ export default function ReportsPage() {
     forecastMonths.push({
       month: d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
       spending: null as number | null,
+      income: null as number | null,
       forecast: Math.round(avgLast3),
     });
   }
@@ -248,7 +259,7 @@ export default function ReportsPage() {
       {/* Spending Trends with Forecast */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Spending Trend & Forecast</CardTitle>
+          <CardTitle className="text-base">Income vs Spending & Forecast</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
@@ -258,7 +269,8 @@ export default function ReportsPage() {
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => v !== null ? formatCurrency(Number(v)) : "—"} contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--card-foreground))" }} />
               <Legend />
-              <Line type="monotone" dataKey="spending" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} name="Actual" />
+              <Line type="monotone" dataKey="income" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} name="Income" />
+              <Line type="monotone" dataKey="spending" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} name="Spending" />
               <Line type="monotone" dataKey="forecast" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} connectNulls={false} name="Forecast" />
             </LineChart>
           </ResponsiveContainer>

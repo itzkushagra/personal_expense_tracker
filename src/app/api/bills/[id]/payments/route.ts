@@ -25,7 +25,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  // create_expense (default true) also records the payment as an expense, so
+  // marking a bill paid shows up in spending and budgets without a second entry.
+  const { create_expense = true, ...body } = await request.json();
   const { data, error } = await supabase
     .from("bill_payments")
     .insert({ ...body, bill_id: id, user_id: user.id })
@@ -36,9 +38,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { data: bill } = await supabase
     .from("bills")
-    .select("frequency, next_due_date")
+    .select("name, category, frequency, next_due_date")
     .eq("id", id)
+    .eq("user_id", user.id)
     .single();
+
+  if (bill && create_expense) {
+    await supabase.from("expenses").insert({
+      user_id: user.id,
+      amount: data.amount_paid,
+      description: bill.name,
+      category: bill.category || "Bills & Utilities",
+      date: data.paid_date,
+      input_method: "manual",
+      ai_categorized: false,
+      is_recurring: true,
+    });
+  }
 
   if (bill) {
     const next = new Date(bill.next_due_date);

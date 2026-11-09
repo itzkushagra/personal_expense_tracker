@@ -72,6 +72,7 @@ export default function RentPage() {
   const year = now.getFullYear();
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   const monthLabel = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+  const rentBill = bills.find((b) => b.is_active && (b.category === "Rent" || /\brent\b/i.test(b.name)));
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -156,6 +157,21 @@ export default function RentPage() {
         }),
       });
       if (!res.ok) throw new Error();
+
+      // Keep the Bills reminder in step: mark this month's rent bill paid (expense already added above).
+      const monthEnd = toLocalDateString(new Date(year, month, 0));
+      if (isRent && rentBill && rentBill.next_due_date <= monthEnd) {
+        await fetch(`/api/bills/${rentBill.id}/payments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount_paid: Number(rental.monthly_rent),
+            paid_date: toLocalDateString(),
+            status: rentBill.next_due_date < toLocalDateString() ? "late" : "paid",
+            create_expense: false,
+          }),
+        });
+      }
       toast.success(`${isRent ? "Rent" : "Maintenance"} for ${monthLabel} logged`);
       fetchData();
     } catch {
@@ -173,7 +189,7 @@ export default function RentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Flat Rent",
-          amount: Number(rental.monthly_rent) + Number(rental.maintenance_charges),
+          amount: Number(rental.monthly_rent),
           category: "Rent",
           frequency: "monthly",
           due_day: rental.rent_due_day,
@@ -230,7 +246,7 @@ export default function RentPage() {
     ? Number(rental.monthly_rent) * (1 + Number(rental.annual_increment_pct) / 100)
     : 0;
 
-  const hasRentBill = bills.some((b) => b.category === "Rent" || /rent/i.test(b.name));
+  const hasRentBill = !!rentBill;
 
   // Last 12 months of rent, newest first, for the payment history strip.
   const history = Array.from({ length: 12 }, (_, i) => {

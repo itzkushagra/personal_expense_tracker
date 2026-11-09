@@ -135,7 +135,7 @@ export default function BillsPage() {
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success(`Marked ${bill.name} as paid`);
+      toast.success(`Marked ${bill.name} as paid and added it to expenses`);
       fetchBills();
     } catch {
       toast.error("Failed to mark as paid");

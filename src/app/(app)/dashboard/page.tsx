@@ -20,7 +20,7 @@ import {
   type Goal,
   type Bill,
   type Rental,
-  type HeldFundWithBalance,
+  type PersonLoanWithBalance,
   CATEGORY_COLORS,
   HOUSING_CATEGORIES,
   outOfPocket,
@@ -42,6 +42,7 @@ import {
   Home,
   HandCoins,
   Briefcase,
+  Wallet,
 } from "lucide-react";
 import { formatCurrency, formatDate, daysUntil } from "@/lib/utils";
 
@@ -55,7 +56,8 @@ export default function DashboardPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [netWorth, setNetWorth] = useState<NetWorthBreakdown | null>(null);
   const [rental, setRental] = useState<Rental | null>(null);
-  const [heldFunds, setHeldFunds] = useState<HeldFundWithBalance[]>([]);
+  const [loans, setLoans] = useState<PersonLoanWithBalance[]>([]);
+  const [incomeTotal, setIncomeTotal] = useState(0);
   const [claims, setClaims] = useState<Expense[]>([]);
 
   const now = new Date();
@@ -65,7 +67,7 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, netWorthRes, rentalRes, heldRes, claimsRes] = await Promise.all([
+      const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, netWorthRes, rentalRes, loansRes, claimsRes, incomesRes] = await Promise.all([
         fetch(`/api/expenses?month=${currentMonth}&year=${currentYear}&limit=1000`),
         fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
         fetch("/api/budgets"),
@@ -73,11 +75,12 @@ export default function DashboardPage() {
         fetch("/api/bills"),
         fetch("/api/net-worth?current=1"),
         fetch("/api/rental"),
-        fetch("/api/held-funds"),
+        fetch("/api/people-loans"),
         fetch("/api/reimbursements"),
+        fetch(`/api/incomes?month=${currentMonth}&year=${currentYear}`),
       ]);
 
-      const [expensesJson, summaryJson, budgetsJson, goalsJson, billsJson, netWorthJson, rentalJson, heldJson, claimsJson] = await Promise.all([
+      const [expensesJson, summaryJson, budgetsJson, goalsJson, billsJson, netWorthJson, rentalJson, loansJson, claimsJson, incomesJson] = await Promise.all([
         expensesRes.json(),
         summaryRes.json(),
         budgetsRes.json(),
@@ -85,8 +88,9 @@ export default function DashboardPage() {
         billsRes.json(),
         netWorthRes.json(),
         rentalRes.json(),
-        heldRes.json(),
+        loansRes.json(),
         claimsRes.json(),
+        incomesRes.json(),
       ]);
 
       setExpenses(expensesJson.data || []);
@@ -96,7 +100,8 @@ export default function DashboardPage() {
       setBills(billsJson.data || []);
       setNetWorth(netWorthJson.data || null);
       setRental(rentalJson.data || null);
-      setHeldFunds(heldJson.data || []);
+      setLoans(loansJson.data || []);
+      setIncomeTotal((incomesJson.data || []).reduce((s: number, i: { amount: number }) => s + Number(i.amount), 0));
       setClaims(claimsJson.data || []);
 
       const trend: Record<string, number> = {};
@@ -165,9 +170,13 @@ export default function DashboardPage() {
   const housingSpent = expenses
     .filter((e) => HOUSING_CATEGORIES.includes(e.category))
     .reduce((s, e) => s + outOfPocket(e), 0);
-  const activeHeld = heldFunds.filter((f) => f.balance > 0);
-  const totalHeld = activeHeld.reduce((s, f) => s + f.balance, 0);
-  const heldOverdue = activeHeld.filter((f) => f.expected_return_date && daysUntil(f.expected_return_date) < 0);
+  const activeLoans = loans.filter((l) => l.balance > 0);
+  const youOwe = activeLoans.filter((l) => l.direction !== "lent").reduce((s, l) => s + l.balance, 0);
+  const owedToYou = activeLoans.filter((l) => l.direction === "lent").reduce((s, l) => s + l.balance, 0);
+  const youOweOverdue = activeLoans.filter(
+    (l) => l.direction !== "lent" && l.expected_return_date && daysUntil(l.expected_return_date) < 0
+  );
+  const leftOver = incomeTotal - totalSpent;
   const claimsDue = claims.reduce((s, c) => s + reimbursementDue(c), 0);
   const claimsToSubmit = claims.filter((c) => c.reimbursement_status === "pending");
 
@@ -208,8 +217,34 @@ export default function DashboardPage() {
         reimbursableAmount={reimbursableThisMonth}
       />
 
-      {/* Rent, held money & reimbursements */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Income, rent, people & loans, reimbursements */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href="/income">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Income & Savings</CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {incomeTotal > 0 ? (
+                <>
+                  <div className={`text-xl font-bold ${leftOver >= 0 ? "text-green-600" : "text-destructive"}`}>
+                    {formatCurrency(leftOver)} left
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    of {formatCurrency(incomeTotal)} · {((leftOver / incomeTotal) * 100).toFixed(0)}% saved
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold">—</div>
+                  <p className="text-xs text-muted-foreground">Add this month&apos;s income</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/rent">
           <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${rentOverdue ? "border-red-200 dark:border-red-900" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -237,21 +272,32 @@ export default function DashboardPage() {
           </Card>
         </Link>
 
-        <Link href="/held-money">
-          <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${heldOverdue.length > 0 ? "border-red-200 dark:border-red-900" : ""}`}>
+        <Link href="/people">
+          <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${youOweOverdue.length > 0 ? "border-red-200 dark:border-red-900" : ""}`}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Held for Others</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">People & Loans</CardTitle>
               <HandCoins className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold">{totalHeld > 0 ? formatCurrency(totalHeld) : "—"}</div>
-              <p className={`text-xs ${heldOverdue.length > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                {heldOverdue.length > 0
-                  ? `${heldOverdue.length} overdue to return`
-                  : activeHeld.length > 0
-                    ? `owed back to ${activeHeld.length} ${activeHeld.length === 1 ? "person" : "people"}`
-                    : "Nothing held"}
-              </p>
+              {activeLoans.length > 0 ? (
+                <>
+                  <div className="text-xl font-bold">
+                    {youOwe > 0 ? `You owe ${formatCurrency(youOwe)}` : "You owe nothing"}
+                  </div>
+                  <p className={`text-xs ${youOweOverdue.length > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                    {youOweOverdue.length > 0
+                      ? `${youOweOverdue.length} overdue to return`
+                      : owedToYou > 0
+                        ? `${formatCurrency(owedToYou)} owed to you`
+                        : "all on time"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold">—</div>
+                  <p className="text-xs text-muted-foreground">No open loans</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </Link>

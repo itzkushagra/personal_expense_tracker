@@ -76,26 +76,36 @@ export interface Rental {
   updated_at: string;
 }
 
-// --- Money held for friends & family ---
+// --- People & Loans (money between you and friends/family) ---
+// Stored in the held_funds / held_fund_entries tables.
 
-export type HeldFundRelation = "friend" | "family" | "colleague" | "other";
+export type PersonRelation = "friend" | "family" | "colleague" | "other";
 
-export interface HeldFundEntry {
+/**
+ * holding  – they left money with you to keep; you give it back
+ * borrowed – they lent you money / helped you out; you repay it
+ * lent     – you lent them money; they pay you back
+ */
+export type LoanDirection = "holding" | "borrowed" | "lent";
+
+export interface PersonLoanEntry {
   id: string;
   held_fund_id: string;
   user_id: string;
-  type: "received" | "returned";
+  /** in = money came to you, out = money left you */
+  type: "in" | "out";
   amount: number;
   date: string;
   note: string;
   created_at: string;
 }
 
-export interface HeldFund {
+export interface PersonLoan {
   id: string;
   user_id: string;
   person_name: string;
-  relation: HeldFundRelation;
+  relation: PersonRelation;
+  direction: LoanDirection;
   purpose: string;
   expected_return_date: string | null;
   is_settled: boolean;
@@ -103,19 +113,100 @@ export interface HeldFund {
   updated_at: string;
 }
 
-export interface HeldFundWithBalance extends HeldFund {
-  entries: HeldFundEntry[];
-  total_received: number;
-  total_returned: number;
+export interface PersonLoanWithBalance extends PersonLoan {
+  entries: PersonLoanEntry[];
+  /** Original amount plus any top-ups. */
+  total_principal: number;
+  /** Amount paid back so far. */
+  total_repaid: number;
+  /** Still outstanding. You owe it for holding/borrowed; they owe you for lent. */
   balance: number;
 }
 
-export const HELD_FUND_RELATION_LABELS: Record<HeldFundRelation, string> = {
+/** Which entry type opens / adds to a record, and which one pays it back. */
+export function loanEntryTypes(direction: LoanDirection) {
+  return direction === "lent"
+    ? { principal: "out" as const, repayment: "in" as const }
+    : { principal: "in" as const, repayment: "out" as const };
+}
+
+export function loanBalance(direction: LoanDirection, entries: Pick<PersonLoanEntry, "type" | "amount">[]) {
+  const { principal } = loanEntryTypes(direction);
+  const total_principal = entries.filter((e) => e.type === principal).reduce((s, e) => s + Number(e.amount), 0);
+  const total_repaid = entries.filter((e) => e.type !== principal).reduce((s, e) => s + Number(e.amount), 0);
+  return { total_principal, total_repaid, balance: total_principal - total_repaid };
+}
+
+export const PERSON_RELATION_LABELS: Record<PersonRelation, string> = {
   friend: "Friend",
   family: "Family",
   colleague: "Colleague",
   other: "Other",
 };
+
+export const LOAN_DIRECTION_LABELS: Record<LoanDirection, string> = {
+  holding: "Keeping for them",
+  borrowed: "Borrowed from them",
+  lent: "Lent to them",
+};
+
+// --- Income ---
+
+export type IncomeType =
+  | "salary"
+  | "freelance"
+  | "business"
+  | "interest"
+  | "rental"
+  | "gift"
+  | "refund"
+  | "other";
+
+export interface Income {
+  id: string;
+  user_id: string;
+  amount: number;
+  source: string;
+  type: IncomeType;
+  date: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const INCOME_TYPE_LABELS: Record<IncomeType, string> = {
+  salary: "Salary",
+  freelance: "Freelance",
+  business: "Business",
+  interest: "Interest / Dividends",
+  rental: "Rental Income",
+  gift: "Gift (no need to return)",
+  refund: "Refund / Cashback",
+  other: "Other",
+};
+
+export const INCOME_TYPE_COLORS: Record<IncomeType, string> = {
+  salary: "#16a34a",
+  freelance: "#0891b2",
+  business: "#2563eb",
+  interest: "#7c3aed",
+  rental: "#0f766e",
+  gift: "#db2777",
+  refund: "#ca8a04",
+  other: "#64748b",
+};
+
+/** 50/30/20 split: categories counted as "needs"; everything else is "wants". */
+export const NEEDS_CATEGORIES: readonly string[] = [
+  "Rent",
+  "Home & Maintenance",
+  "Household Help",
+  "Bills & Utilities",
+  "Groceries",
+  "Transport",
+  "Health",
+  "Education",
+];
 
 export interface MonthlySummary {
   id: string;
@@ -146,6 +237,7 @@ export interface DailySpending {
 
 // --- Accounts & Net Worth ---
 
+/** "loan" is kept for existing accounts; new loans belong in the Debt Tracker. */
 export type AccountType = "checking" | "savings" | "credit_card" | "loan" | "investment";
 
 export interface Account {

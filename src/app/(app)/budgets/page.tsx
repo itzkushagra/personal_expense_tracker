@@ -33,10 +33,12 @@ import {
 import {
   type BudgetWithSpent,
   type Rental,
+  type Expense,
   EXPENSE_CATEGORIES,
   CATEGORY_COLORS,
   HOUSING_CATEGORIES,
 } from "@/types";
+import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -49,14 +51,30 @@ export default function BudgetsPage() {
 
   const [rental, setRental] = useState<Rental | null>(null);
   const [showRenterSetup, setShowRenterSetup] = useState(false);
+  const [monthIncome, setMonthIncome] = useState(0);
+  const [monthExpenses, setMonthExpenses] = useState<Expense[]>([]);
 
   const fetchBudgets = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, rentalRes] = await Promise.all([fetch("/api/budgets"), fetch("/api/rental")]);
-      const [json, rentalJson] = await Promise.all([res.json(), rentalRes.json()]);
+      const now = new Date();
+      const period = `month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
+      const [res, rentalRes, incRes, expRes] = await Promise.all([
+        fetch("/api/budgets"),
+        fetch("/api/rental"),
+        fetch(`/api/incomes?${period}`),
+        fetch(`/api/expenses?${period}&limit=1000`),
+      ]);
+      const [json, rentalJson, incJson, expJson] = await Promise.all([
+        res.json(),
+        rentalRes.json(),
+        incRes.json(),
+        expRes.json(),
+      ]);
       setBudgets(json.data || []);
       setRental(rentalJson.data || null);
+      setMonthIncome((incJson.data || []).reduce((s: number, i: { amount: number }) => s + Number(i.amount), 0));
+      setMonthExpenses(expJson.data || []);
     } catch {
       toast.error("Failed to load budgets");
     } finally {
@@ -224,6 +242,8 @@ export default function BudgetsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <FiftyThirtyTwenty income={monthIncome} expenses={monthExpenses} title="This Month vs 50/30/20" />
 
       {/* Renter quick setup */}
       {missingHousing.length > 0 && (

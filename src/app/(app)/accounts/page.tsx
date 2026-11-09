@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,6 +175,7 @@ export default function AccountsPage() {
       setShowDebtDialog(false);
       setEditingDebt(null);
       fetchData();
+      fetch("/api/net-worth", { method: "POST" });
     } catch {
       toast.error("Failed to save debt");
     } finally {
@@ -215,12 +217,13 @@ export default function AccountsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(totalAssets)}</div>
-            {adj && (adj.security_deposit > 0 || adj.pending_reimbursements > 0) && (
+            {adj && (adj.security_deposit > 0 || adj.pending_reimbursements > 0 || adj.owed_to_you > 0) && (
               <p className="text-xs text-muted-foreground">
                 incl.{" "}
                 {[
                   adj.security_deposit > 0 && `${formatCurrency(adj.security_deposit)} rent deposit`,
                   adj.pending_reimbursements > 0 && `${formatCurrency(adj.pending_reimbursements)} pending claims`,
+                  adj.owed_to_you > 0 && `${formatCurrency(adj.owed_to_you)} lent out`,
                 ].filter(Boolean).join(" + ")}
               </p>
             )}
@@ -232,9 +235,13 @@ export default function AccountsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{formatCurrency(totalLiabilities)}</div>
-            {adj && adj.held_for_others > 0 && (
+            {adj && (adj.tracked_debt > 0 || adj.owed_by_you > 0) && (
               <p className="text-xs text-muted-foreground">
-                incl. {formatCurrency(adj.held_for_others)} held for friends & family
+                incl.{" "}
+                {[
+                  adj.tracked_debt > 0 && `${formatCurrency(adj.tracked_debt)} tracked debts`,
+                  adj.owed_by_you > 0 && `${formatCurrency(adj.owed_by_you)} owed to friends & family`,
+                ].filter(Boolean).join(" + ")}
               </p>
             )}
           </CardContent>
@@ -294,9 +301,12 @@ export default function AccountsPage() {
                     <Select name="type" defaultValue={editingAccount?.type || "checking"}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {(Object.entries(ACCOUNT_TYPE_LABELS) as [AccountType, string][]).map(([val, label]) => (
-                          <SelectItem key={val} value={val}>{label}</SelectItem>
-                        ))}
+                        {(Object.entries(ACCOUNT_TYPE_LABELS) as [AccountType, string][])
+                          // Loans live in the Debt Tracker; keep the option only for existing loan accounts.
+                          .filter(([val]) => val !== "loan" || editingAccount?.type === "loan")
+                          .map(([val, label]) => (
+                            <SelectItem key={val} value={val}>{label}</SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -362,6 +372,10 @@ export default function AccountsPage() {
           <div>
             <CardTitle className="text-base">Debt Tracker</CardTitle>
             {totalDebt > 0 && <p className="text-sm text-muted-foreground">Total outstanding: {formatCurrency(totalDebt)}</p>}
+            <p className="text-xs text-muted-foreground">
+              Bank loans, EMIs and credit cards; counted in net worth. Money from friends or family goes in{" "}
+              <Link href="/people" className="underline">People & Loans</Link>.
+            </p>
           </div>
           <Dialog open={showDebtDialog} onOpenChange={(o) => { setShowDebtDialog(o); if (!o) setEditingDebt(null); }}>
             <DialogTrigger render={<Button size="sm" variant="outline" />}>
