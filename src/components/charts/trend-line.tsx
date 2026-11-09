@@ -52,17 +52,17 @@ export function TrendLine({ data }: TrendLineProps) {
               formatter={(value) => formatCurrency(Number(value))}
               contentStyle={{
                 borderRadius: "8px",
-                border: "1px solid hsl(var(--border))",
-                background: "hsl(var(--card))",
-                color: "hsl(var(--card-foreground))",
+                border: "1px solid var(--border)",
+                background: "var(--card)",
+                color: "var(--card-foreground)",
               }}
             />
             <Line
               type="monotone"
               dataKey="total"
-              stroke="hsl(var(--primary))"
+              stroke="var(--primary)"
               strokeWidth={2}
-              dot={{ r: 4, fill: "hsl(var(--primary))" }}
+              dot={{ r: 4, fill: "var(--primary)" }}
             />
           </LineChart>
         </ResponsiveContainer>

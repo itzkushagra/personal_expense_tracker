@@ -268,11 +268,11 @@ export default function ReportsPage() {
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => v !== null ? formatCurrency(Number(v)) : "—"} contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--card-foreground))" }} />
+              <Tooltip formatter={(v) => v !== null ? formatCurrency(Number(v)) : "—"} contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--card-foreground)" }} />
               <Legend />
               <Line type="monotone" dataKey="income" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} name="Income" />
-              <Line type="monotone" dataKey="spending" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} name="Spending" />
-              <Line type="monotone" dataKey="forecast" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} connectNulls={false} name="Forecast" />
+              <Line type="monotone" dataKey="spending" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} name="Spending" />
+              <Line type="monotone" dataKey="forecast" stroke="var(--primary)" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} connectNulls={false} name="Forecast" />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -293,7 +293,7 @@ export default function ReportsPage() {
                   <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value">
                     {categoryData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--card-foreground))" }} />
+                  <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--card-foreground)" }} />
                   <Legend formatter={(v) => <span className="text-xs">{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>
@@ -315,10 +315,10 @@ export default function ReportsPage() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v}`} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
-                  <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))", color: "hsl(var(--card-foreground))" }} />
+                  <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)", background: "var(--card)", color: "var(--card-foreground)" }} />
                   <Legend />
-                  <Bar dataKey="current" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} name="This Month" />
-                  <Bar dataKey="previous" fill="hsl(var(--muted-foreground))" radius={[0, 4, 4, 0]} name="Last Month" opacity={0.5} />
+                  <Bar dataKey="current" fill="var(--primary)" radius={[0, 4, 4, 0]} name="This Month" />
+                  <Bar dataKey="previous" fill="var(--muted-foreground)" radius={[0, 4, 4, 0]} name="Last Month" opacity={0.5} />
                 </BarChart>
               </ResponsiveContainer>
             )}

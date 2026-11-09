@@ -64,12 +64,12 @@ export function DailyBar({ data }: DailyBarProps) {
               }
               contentStyle={{
                 borderRadius: "8px",
-                border: "1px solid hsl(var(--border))",
-                background: "hsl(var(--card))",
-                color: "hsl(var(--card-foreground))",
+                border: "1px solid var(--border)",
+                background: "var(--card)",
+                color: "var(--card-foreground)",
               }}
             />
-            <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="amount" fill="var(--primary)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
