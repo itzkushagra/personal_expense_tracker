@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Receipt,
-  PlusCircle,
   Lightbulb,
   LogOut,
   Wallet,
@@ -30,7 +29,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/expenses", label: "Expenses", icon: Receipt },
-  { href: "/expenses/add", label: "Add Expense", icon: PlusCircle },
   { href: "/income", label: "Income", icon: Banknote },
   { href: "/rent", label: "Rent & Home", icon: Home },
   { href: "/accounts", label: "Accounts", icon: Landmark },

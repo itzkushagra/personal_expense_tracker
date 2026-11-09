@@ -37,9 +37,21 @@ import { toLocalDateString } from "@/lib/utils";
 interface ExpenseFormProps {
   expense?: Expense;
   mode?: "create" | "edit";
+  /** Shown inside a dialog: no card or title of its own. */
+  inDialog?: boolean;
+  /** Called after a successful save instead of navigating to /expenses. */
+  onSaved?: () => void;
+  /** Called on Cancel instead of going back a page. */
+  onCancel?: () => void;
 }
 
-export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
+export function ExpenseForm({
+  expense,
+  mode = "create",
+  inDialog = false,
+  onSaved,
+  onCancel,
+}: ExpenseFormProps) {
   const router = useRouter();
   const { isListening, transcript, error: speechError, startListening, stopListening, isSupported } = useSpeech();
 
@@ -151,8 +163,12 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
           : mode === "edit" ? "Expense updated" : "Expense added",
         otherMonth ? { description: `Saved under ${monthName}. Pick that month in the filter to see it.` } : undefined
       );
-      router.push("/expenses");
-      router.refresh();
+      if (onSaved) {
+        onSaved();
+      } else {
+        router.push("/expenses");
+        router.refresh();
+      }
     } catch (err) {
       toast.error(
         err instanceof Error && err.message ? `Couldn't save: ${err.message}` : "Couldn't save the expense"
@@ -162,14 +178,8 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
     }
   }
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {mode === "edit" ? "Edit Expense" : "Add Expense"}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+  const body = (
+      <>
         {/* Voice input section */}
         {isSupported && mode === "create" && (
           <div className="mb-6 rounded-lg border-2 border-dashed p-4 text-center">
@@ -363,13 +373,25 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.back()}
+              onClick={() => (onCancel ? onCancel() : router.back())}
             >
               Cancel
             </Button>
           </div>
         </form>
-      </CardContent>
+      </>
+  );
+
+  if (inDialog) return body;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {mode === "edit" ? "Edit Expense" : "Add Expense"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 }

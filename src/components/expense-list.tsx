@@ -42,7 +42,14 @@ const MONTH_LABELS: Record<string, string> = Object.fromEntries([
   ["all", "All Time"],
 ]);
 
-export function ExpenseList() {
+interface ExpenseListProps {
+  /** Bump to reload the list, e.g. after adding an expense. */
+  refreshKey?: number;
+  /** Opens the add-expense dialog from the empty state. */
+  onAdd?: () => void;
+}
+
+export function ExpenseList({ refreshKey = 0, onAdd }: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -80,7 +87,7 @@ export function ExpenseList() {
 
   useEffect(() => {
     fetchExpenses();
-  }, [fetchExpenses]);
+  }, [fetchExpenses, refreshKey]);
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this expense?")) return;
@@ -137,9 +144,11 @@ export function ExpenseList() {
         ) : expenses.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">
             <p>No expenses found.</p>
-            <Link href="/expenses/add">
-              <Button className="mt-4">Add your first expense</Button>
-            </Link>
+            {onAdd && (
+              <Button className="mt-4" onClick={onAdd}>
+                Add your first expense
+              </Button>
+            )}
           </div>
         ) : (
           <>

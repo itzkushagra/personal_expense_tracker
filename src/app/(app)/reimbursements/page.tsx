@@ -138,7 +138,7 @@ export default function ReimbursementsPage() {
           <h1 className="text-2xl font-bold">Reimbursements</h1>
           <p className="text-muted-foreground">Office expenses you paid for that your company will pay back</p>
         </div>
-        <Link href="/expenses/add">
+        <Link href="/expenses?add=1">
           <Button><PlusCircle className="mr-1 h-4 w-4" /> Add Expense</Button>
         </Link>
       </div>

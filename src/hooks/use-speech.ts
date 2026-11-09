@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 interface IWindow extends Window {
   SpeechRecognition?: new () => SpeechRecognition;
@@ -80,6 +80,19 @@ export function useSpeech(): UseSpeechReturn {
       recognitionRef.current.stop();
       setIsListening(false);
     }
+  }, []);
+
+  // Stop the microphone if the form goes away mid-listen (e.g. dialog closed).
+  useEffect(() => {
+    return () => {
+      const r = recognitionRef.current;
+      if (r) {
+        r.onresult = null;
+        r.onerror = null;
+        r.onend = null;
+        r.stop();
+      }
+    };
   }, []);
 
   return {
