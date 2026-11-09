@@ -9,7 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -20,9 +23,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Loader2, Sparkles, Briefcase } from "lucide-react";
+import { Mic, MicOff, Loader2, Sparkles, Briefcase, PiggyBank } from "lucide-react";
 import { useSpeech } from "@/hooks/use-speech";
-import { EXPENSE_CATEGORIES, type Expense } from "@/types";
+import {
+  SAVINGS_CATEGORIES,
+  SPENDING_CATEGORIES,
+  isSavingsCategory,
+  type Expense,
+} from "@/types";
 import { toast } from "sonner";
 
 interface ExpenseFormProps {
@@ -48,6 +56,7 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
   );
   const [isReimbursable, setIsReimbursable] = useState(expense?.is_reimbursable || false);
   const [claimReference, setClaimReference] = useState(expense?.claim_reference || "");
+  const isSavings = isSavingsCategory(category);
 
   useEffect(() => {
     if (transcript && !isListening) {
@@ -119,15 +128,18 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
           date,
           input_method: inputMethod,
           ai_categorized: categorizing || category !== "",
-          is_reimbursable: isReimbursable,
-          claim_reference: claimReference,
+          // Savings are your own money set aside, never a company claim.
+          is_reimbursable: isSavings ? false : isReimbursable,
+          claim_reference: isSavings ? "" : claimReference,
         }),
       });
 
       if (!res.ok) throw new Error("Failed to save expense");
 
       toast.success(
-        mode === "edit" ? "Expense updated" : "Expense added"
+        isSavings
+          ? mode === "edit" ? "Savings entry updated" : "Savings entry added"
+          : mode === "edit" ? "Expense updated" : "Expense added"
       );
       router.push("/expenses");
       router.refresh();
@@ -224,7 +236,7 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              placeholder="What did you spend on?"
+              placeholder="What did you spend on? (or e.g. Mutual fund SIP, RD deposit)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onBlur={() => {
@@ -262,15 +274,35 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
                 <SelectValue placeholder="Select or let AI decide" />
               </SelectTrigger>
               <SelectContent>
-                {EXPENSE_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectLabel>Savings &amp; investments</SelectLabel>
+                  {SAVINGS_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectSeparator />
+                <SelectGroup>
+                  <SelectLabel>Spending</SelectLabel>
+                  {SPENDING_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
+            {isSavings && (
+              <p className="flex items-start gap-1.5 text-xs text-green-700 dark:text-green-500">
+                <PiggyBank className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Counted as money saved, not spent. It stays in your history but is left
+                out of spending totals, budgets and charts.
+              </p>
+            )}
           </div>
 
+          {!isSavings && (
           <div className="space-y-3 rounded-lg border p-3">
             <label className="flex cursor-pointer items-start gap-3">
               <input
@@ -301,6 +333,7 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
               </div>
             )}
           </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <Button type="submit" disabled={loading} className="flex-1">

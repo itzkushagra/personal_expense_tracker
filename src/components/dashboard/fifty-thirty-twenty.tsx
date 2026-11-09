@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { type Expense, NEEDS_CATEGORIES, outOfPocket } from "@/types";
+import { type Expense, NEEDS_CATEGORIES, isSavingsCategory, outOfPocket } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 
 interface FiftyThirtyTwentyProps {
@@ -18,7 +18,12 @@ interface FiftyThirtyTwentyProps {
 export function FiftyThirtyTwenty({ income, expenses, title = "50/30/20 Check" }: FiftyThirtyTwentyProps) {
   let needs = 0;
   let wants = 0;
+  let putAside = 0;
   for (const e of expenses) {
+    if (isSavingsCategory(e.category)) {
+      putAside += Number(e.amount);
+      continue;
+    }
     const own = outOfPocket(e);
     if (NEEDS_CATEGORIES.includes(e.category)) needs += own;
     else wants += own;
@@ -44,7 +49,9 @@ export function FiftyThirtyTwenty({ income, expenses, title = "50/30/20 Check" }
     },
     {
       label: "Savings",
-      hint: "what's left after spending",
+      hint: putAside > 0
+        ? `incl. ${formatCurrency(putAside)} logged as savings / investments`
+        : "what's left after spending",
       actual: Math.max(0, saved),
       target: income * 0.2,
       good: saved >= income * 0.2,

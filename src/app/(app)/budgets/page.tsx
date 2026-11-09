@@ -34,7 +34,7 @@ import {
   type BudgetWithSpent,
   type Rental,
   type Expense,
-  EXPENSE_CATEGORIES,
+  SPENDING_CATEGORIES,
   CATEGORY_COLORS,
   HOUSING_CATEGORIES,
 } from "@/types";
@@ -304,7 +304,7 @@ export default function BudgetsPage() {
                   <Select name="category" defaultValue={editing?.category || ""}>
                     <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                     <SelectContent>
-                      {EXPENSE_CATEGORIES.map((cat) => (
+                      {SPENDING_CATEGORIES.map((cat) => (
                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
                     </SelectContent>

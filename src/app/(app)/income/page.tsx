@@ -483,7 +483,7 @@ export default function IncomePage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(totalSpent)}</div>
-                <p className="text-xs text-muted-foreground">out of pocket, excl. investments</p>
+                <p className="text-xs text-muted-foreground">out of pocket, excl. savings &amp; investments</p>
               </CardContent>
             </Card>
             <Card>
@@ -494,7 +494,7 @@ export default function IncomePage() {
               <CardContent>
                 <div className={`text-2xl font-bold ${leftOver >= 0 ? "text-green-600" : "text-destructive"}`}>{formatCurrency(leftOver)}</div>
                 <p className="text-xs text-muted-foreground">
-                  {invested > 0 ? `incl. ${formatCurrency(invested)} invested` : leftOver >= 0 ? "available to save or invest" : "overspent this month"}
+                  {invested > 0 ? `incl. ${formatCurrency(invested)} saved / invested` : leftOver >= 0 ? "available to save or invest" : "overspent this month"}
                 </p>
               </CardContent>
             </Card>

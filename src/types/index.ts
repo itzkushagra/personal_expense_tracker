@@ -39,7 +39,7 @@ export const REIMBURSEMENT_STATUS_LABELS: Record<ReimbursementStatus, string> = 
 export function outOfPocket(
   e: Pick<Expense, "amount" | "category" | "is_reimbursable" | "reimbursement_status" | "reimbursed_amount">
 ): number {
-  if (SAVINGS_CATEGORIES.includes(e.category)) return 0;
+  if (isSavingsCategory(e.category)) return 0;
   const amount = Number(e.amount);
   if (!e.is_reimbursable || e.reimbursement_status === "rejected") return amount;
   if (e.reimbursement_status === "reimbursed") {
@@ -376,15 +376,28 @@ export const EXPENSE_CATEGORIES = [
   "Travel",
   "Gifts",
   "Personal Care",
-  "Investments",
   "Miscellaneous",
+  "Savings",
+  "Investments",
 ] as const;
 
 /**
- * Money moved into SIPs, stocks, FDs etc. It is recorded like an expense so the
- * cash trail is complete, but it is savings, not spending.
+ * Money you put aside rather than spend:
+ * - Savings: savings-account transfers, RD, emergency fund, goal contributions
+ * - Investments: SIPs / mutual funds, stocks, FDs, gold, PPF/NPS
+ * It is recorded like an expense so the cash trail is complete, but it is
+ * left out of every spending total, budget and chart.
  */
-export const SAVINGS_CATEGORIES: readonly string[] = ["Investments"];
+export const SAVINGS_CATEGORIES: readonly string[] = ["Savings", "Investments"];
+
+/** Categories that are actual spending (everything except savings). */
+export const SPENDING_CATEGORIES: readonly string[] = EXPENSE_CATEGORIES.filter(
+  (c) => !SAVINGS_CATEGORIES.includes(c)
+);
+
+export function isSavingsCategory(category: string | null | undefined): boolean {
+  return !!category && SAVINGS_CATEGORIES.includes(category);
+}
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
@@ -412,6 +425,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Travel: "#06b6d4",
   Gifts: "#e879f9",
   "Personal Care": "#fb7185",
+  Savings: "#059669",
   Investments: "#16a34a",
   Miscellaneous: "#94a3b8",
 };

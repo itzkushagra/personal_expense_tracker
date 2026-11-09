@@ -19,7 +19,8 @@ Guidance:
 - Household Help: maid, cook, cleaner, laundry/ironing, house help salary
 - Bills & Utilities: electricity, water, gas cylinder/PNG, internet/WiFi, mobile recharge
 - Personal Care: skincare, makeup, haircare, salon, grooming, toiletries
-- Investments: SIP, mutual funds, stocks, FD/RD deposits, gold, PPF/NPS contributions
+- Investments: SIP, mutual funds, stocks, FD deposits, gold, PPF/NPS contributions
+- Savings: money moved to a savings account, RD deposits, emergency fund, saving towards a goal (e.g. bike down payment)
 
 Expense description: "${description}"
 
