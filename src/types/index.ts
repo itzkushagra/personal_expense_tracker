@@ -10,9 +10,112 @@ export interface Expense {
   tags: string[];
   account_id: string | null;
   is_recurring: boolean;
+  is_reimbursable: boolean;
+  reimbursement_status: ReimbursementStatus | null;
+  reimbursed_amount: number;
+  reimbursed_date: string | null;
+  claim_reference: string;
   created_at: string;
   updated_at: string;
 }
+
+// --- Company Reimbursements ---
+
+export type ReimbursementStatus = "pending" | "submitted" | "reimbursed" | "rejected";
+
+export const REIMBURSEMENT_STATUS_LABELS: Record<ReimbursementStatus, string> = {
+  pending: "To Submit",
+  submitted: "Submitted",
+  reimbursed: "Reimbursed",
+  rejected: "Rejected",
+};
+
+/**
+ * The part of an expense that comes out of your own pocket.
+ * Reimbursable expenses count as zero until the claim is rejected, or as the
+ * shortfall if the company paid back less than the amount spent.
+ */
+export function outOfPocket(
+  e: Pick<Expense, "amount" | "is_reimbursable" | "reimbursement_status" | "reimbursed_amount">
+): number {
+  const amount = Number(e.amount);
+  if (!e.is_reimbursable || e.reimbursement_status === "rejected") return amount;
+  if (e.reimbursement_status === "reimbursed") {
+    return Math.max(0, amount - Number(e.reimbursed_amount || 0));
+  }
+  return 0;
+}
+
+/** Amount still expected back from the company for this expense. */
+export function reimbursementDue(
+  e: Pick<Expense, "amount" | "is_reimbursable" | "reimbursement_status">
+): number {
+  if (!e.is_reimbursable) return 0;
+  return e.reimbursement_status === "pending" || e.reimbursement_status === "submitted"
+    ? Number(e.amount)
+    : 0;
+}
+
+// --- Rent & Home ---
+
+export interface Rental {
+  id: string;
+  user_id: string;
+  address: string;
+  landlord_name: string;
+  landlord_contact: string;
+  monthly_rent: number;
+  maintenance_charges: number;
+  rent_due_day: number;
+  security_deposit: number;
+  lease_start: string | null;
+  lease_end: string | null;
+  annual_increment_pct: number;
+  notice_period_days: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Money held for friends & family ---
+
+export type HeldFundRelation = "friend" | "family" | "colleague" | "other";
+
+export interface HeldFundEntry {
+  id: string;
+  held_fund_id: string;
+  user_id: string;
+  type: "received" | "returned";
+  amount: number;
+  date: string;
+  note: string;
+  created_at: string;
+}
+
+export interface HeldFund {
+  id: string;
+  user_id: string;
+  person_name: string;
+  relation: HeldFundRelation;
+  purpose: string;
+  expected_return_date: string | null;
+  is_settled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HeldFundWithBalance extends HeldFund {
+  entries: HeldFundEntry[];
+  total_received: number;
+  total_returned: number;
+  balance: number;
+}
+
+export const HELD_FUND_RELATION_LABELS: Record<HeldFundRelation, string> = {
+  friend: "Friend",
+  family: "Family",
+  colleague: "Colleague",
+  other: "Other",
+};
 
 export interface MonthlySummary {
   id: string;
@@ -160,6 +263,9 @@ export interface BillPayment {
 }
 
 export const EXPENSE_CATEGORIES = [
+  "Rent",
+  "Home & Maintenance",
+  "Household Help",
   "Food & Dining",
   "Groceries",
   "Transport",
@@ -176,7 +282,18 @@ export const EXPENSE_CATEGORIES = [
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
+/** Categories that make up the fixed cost of living in a rented flat. */
+export const HOUSING_CATEGORIES: readonly string[] = [
+  "Rent",
+  "Home & Maintenance",
+  "Household Help",
+  "Bills & Utilities",
+];
+
 export const CATEGORY_COLORS: Record<string, string> = {
+  Rent: "#0f766e",
+  "Home & Maintenance": "#a16207",
+  "Household Help": "#7c3aed",
   "Food & Dining": "#f97316",
   Groceries: "#22c55e",
   Transport: "#3b82f6",

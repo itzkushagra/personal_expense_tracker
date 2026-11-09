@@ -52,6 +52,7 @@ import {
   ACCOUNT_TYPE_COLORS,
   DEBT_TYPE_LABELS,
 } from "@/types";
+import type { NetWorthBreakdown } from "@/lib/net-worth";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -67,6 +68,7 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthSnapshot[]>([]);
+  const [current, setCurrent] = useState<NetWorthBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showDebtDialog, setShowDebtDialog] = useState(false);
@@ -77,19 +79,22 @@ export default function AccountsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [accRes, debtRes, nwRes] = await Promise.all([
+      const [accRes, debtRes, nwRes, currentRes] = await Promise.all([
         fetch("/api/accounts"),
         fetch("/api/debts"),
         fetch("/api/net-worth"),
+        fetch("/api/net-worth?current=1"),
       ]);
-      const [accJson, debtJson, nwJson] = await Promise.all([
+      const [accJson, debtJson, nwJson, currentJson] = await Promise.all([
         accRes.json(),
         debtRes.json(),
         nwRes.json(),
+        currentRes.json(),
       ]);
       setAccounts(accJson.data || []);
       setDebts(debtJson.data || []);
       setNetWorthHistory(nwJson.data || []);
+      setCurrent(currentJson.data || null);
     } catch {
       toast.error("Failed to load data");
     } finally {
@@ -99,13 +104,10 @@ export default function AccountsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const totalAssets = accounts
-    .filter((a) => a.type !== "credit_card" && a.type !== "loan")
-    .reduce((s, a) => s + Number(a.balance), 0);
-  const totalLiabilities = accounts
-    .filter((a) => a.type === "credit_card" || a.type === "loan")
-    .reduce((s, a) => s + Math.abs(Number(a.balance)), 0);
-  const netWorth = totalAssets - totalLiabilities;
+  const totalAssets = current?.total_assets ?? 0;
+  const totalLiabilities = current?.total_liabilities ?? 0;
+  const netWorth = current?.net_worth ?? 0;
+  const adj = current?.adjustments;
 
   const totalDebt = debts.filter((d) => d.is_active).reduce((s, d) => s + Number(d.current_balance), 0);
 
@@ -213,6 +215,15 @@ export default function AccountsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(totalAssets)}</div>
+            {adj && (adj.security_deposit > 0 || adj.pending_reimbursements > 0) && (
+              <p className="text-xs text-muted-foreground">
+                incl.{" "}
+                {[
+                  adj.security_deposit > 0 && `${formatCurrency(adj.security_deposit)} rent deposit`,
+                  adj.pending_reimbursements > 0 && `${formatCurrency(adj.pending_reimbursements)} pending claims`,
+                ].filter(Boolean).join(" + ")}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -221,6 +232,11 @@ export default function AccountsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{formatCurrency(totalLiabilities)}</div>
+            {adj && adj.held_for_others > 0 && (
+              <p className="text-xs text-muted-foreground">
+                incl. {formatCurrency(adj.held_for_others)} held for friends & family
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>

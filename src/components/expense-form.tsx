@@ -20,7 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Loader2, Sparkles } from "lucide-react";
+import { Mic, MicOff, Loader2, Sparkles, Briefcase } from "lucide-react";
 import { useSpeech } from "@/hooks/use-speech";
 import { EXPENSE_CATEGORIES, type Expense } from "@/types";
 import { toast } from "sonner";
@@ -46,6 +46,8 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
   const [inputMethod, setInputMethod] = useState<"manual" | "voice">(
     expense?.input_method || "manual"
   );
+  const [isReimbursable, setIsReimbursable] = useState(expense?.is_reimbursable || false);
+  const [claimReference, setClaimReference] = useState(expense?.claim_reference || "");
 
   useEffect(() => {
     if (transcript && !isListening) {
@@ -117,6 +119,8 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
           date,
           input_method: inputMethod,
           ai_categorized: categorizing || category !== "",
+          is_reimbursable: isReimbursable,
+          claim_reference: claimReference,
         }),
       });
 
@@ -265,6 +269,37 @@ export function ExpenseForm({ expense, mode = "create" }: ExpenseFormProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={isReimbursable}
+                onChange={(e) => setIsReimbursable(e.target.checked)}
+              />
+              <span>
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <Briefcase className="h-3.5 w-3.5" />
+                  Company will reimburse this
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Tracked under Reimbursements and left out of your budgets until the claim is settled
+                </span>
+              </span>
+            </label>
+            {isReimbursable && (
+              <div className="space-y-2">
+                <Label htmlFor="claim-ref">Claim / bill reference (optional)</Label>
+                <Input
+                  id="claim-ref"
+                  placeholder="e.g. EXP-2026-114 or invoice number"
+                  value={claimReference}
+                  onChange={(e) => setClaimReference(e.target.value)}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">

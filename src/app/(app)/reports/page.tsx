@@ -36,7 +36,7 @@ import {
   BarChart3,
   DollarSign,
 } from "lucide-react";
-import { type Expense, CATEGORY_COLORS } from "@/types";
+import { type Expense, CATEGORY_COLORS, outOfPocket } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -73,7 +73,7 @@ export default function ReportsPage() {
     const d = new Date(exp.date);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!monthlyMap[key]) monthlyMap[key] = { total: 0, income: 0, count: 0 };
-    monthlyMap[key].total += Number(exp.amount);
+    monthlyMap[key].total += outOfPocket(exp);
     monthlyMap[key].count++;
   }
   const monthlyTrends = Object.entries(monthlyMap)
@@ -87,7 +87,7 @@ export default function ReportsPage() {
   // Category breakdown
   const categoryMap: Record<string, number> = {};
   for (const exp of filtered) {
-    categoryMap[exp.category] = (categoryMap[exp.category] || 0) + Number(exp.amount);
+    categoryMap[exp.category] = (categoryMap[exp.category] || 0) + outOfPocket(exp);
   }
   const categoryData = Object.entries(categoryMap)
     .map(([name, value]) => ({ name, value: Math.round(value), color: CATEGORY_COLORS[name] || "#94a3b8" }))
@@ -132,7 +132,7 @@ export default function ReportsPage() {
     const desc = exp.description.toLowerCase().trim();
     if (!descMap[desc]) descMap[desc] = { count: 0, total: 0 };
     descMap[desc].count++;
-    descMap[desc].total += Number(exp.amount);
+    descMap[desc].total += outOfPocket(exp);
   }
   const topMerchants = Object.entries(descMap)
     .sort(([, a], [, b]) => b.total - a.total)
@@ -146,9 +146,9 @@ export default function ReportsPage() {
     const d = new Date(exp.date);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (key === currentMonthKey) {
-      currentCatMap[exp.category] = (currentCatMap[exp.category] || 0) + Number(exp.amount);
+      currentCatMap[exp.category] = (currentCatMap[exp.category] || 0) + outOfPocket(exp);
     } else if (key === prevMonthKey) {
-      prevCatMap[exp.category] = (prevCatMap[exp.category] || 0) + Number(exp.amount);
+      prevCatMap[exp.category] = (prevCatMap[exp.category] || 0) + outOfPocket(exp);
     }
   }
   const catComparison = Object.keys({ ...currentCatMap, ...prevCatMap }).map((cat) => ({
@@ -347,12 +347,12 @@ export default function ReportsPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             {(() => {
               const yearExpenses = expenses.filter((e) => new Date(e.date).getFullYear() === now.getFullYear());
-              const yearTotal = yearExpenses.reduce((s, e) => s + Number(e.amount), 0);
+              const yearTotal = yearExpenses.reduce((s, e) => s + outOfPocket(e), 0);
               const yearMonths = new Set(yearExpenses.map((e) => new Date(e.date).getMonth())).size;
               const yearAvg = yearMonths > 0 ? yearTotal / yearMonths : 0;
               const topCat = Object.entries(
                 yearExpenses.reduce<Record<string, number>>((acc, e) => {
-                  acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
+                  acc[e.category] = (acc[e.category] || 0) + outOfPocket(e);
                   return acc;
                 }, {})
               ).sort(([, a], [, b]) => b - a)[0];

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateTips } from "@/lib/gemini";
+import { outOfPocket } from "@/types";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -61,12 +62,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalSpent = expenses.reduce((sum, e) => sum + outOfPocket(e), 0);
 
   const categoryBreakdown: Record<string, number> = {};
   for (const expense of expenses) {
-    categoryBreakdown[expense.category] =
-      (categoryBreakdown[expense.category] || 0) + Number(expense.amount);
+    const own = outOfPocket(expense);
+    if (own > 0) {
+      categoryBreakdown[expense.category] =
+        (categoryBreakdown[expense.category] || 0) + own;
+    }
   }
 
   const topExpenses = expenses.slice(0, 5);
@@ -79,14 +83,14 @@ export async function POST(request: NextRequest) {
 
   const { data: prevExpenses } = await supabase
     .from("expenses")
-    .select("amount")
+    .select("amount, is_reimbursable, reimbursement_status, reimbursed_amount")
     .eq("user_id", user.id)
     .gte("date", prevStartDate)
     .lte("date", prevEndDate);
 
   if (prevExpenses && prevExpenses.length > 0) {
     const prevTotal = prevExpenses.reduce(
-      (sum, e) => sum + Number(e.amount),
+      (sum, e) => sum + outOfPocket(e),
       0
     );
     comparison = {

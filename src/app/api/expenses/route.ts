@@ -57,8 +57,16 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { amount, description, category, date, input_method, ai_categorized } =
-    body;
+  const {
+    amount,
+    description,
+    category,
+    date,
+    input_method,
+    ai_categorized,
+    is_reimbursable,
+    claim_reference,
+  } = body;
 
   const { data, error } = await supabase
     .from("expenses")
@@ -70,6 +78,9 @@ export async function POST(request: NextRequest) {
       date: date || new Date().toISOString().split("T")[0],
       input_method: input_method || "manual",
       ai_categorized: ai_categorized || false,
+      is_reimbursable: !!is_reimbursable,
+      reimbursement_status: is_reimbursable ? "pending" : null,
+      claim_reference: is_reimbursable ? claim_reference || "" : "",
     })
     .select()
     .single();

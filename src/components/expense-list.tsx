@@ -17,8 +17,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Pencil, Trash2, Mic, ChevronLeft, ChevronRight } from "lucide-react";
-import { type Expense, EXPENSE_CATEGORIES, CATEGORY_COLORS } from "@/types";
+import { Pencil, Trash2, Mic, ChevronLeft, ChevronRight, Briefcase } from "lucide-react";
+import {
+  type Expense,
+  EXPENSE_CATEGORIES,
+  CATEGORY_COLORS,
+  REIMBURSEMENT_STATUS_LABELS,
+} from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -150,6 +155,21 @@ export function ExpenseList() {
                       <Badge variant="secondary" className="text-xs">
                         {expense.category}
                       </Badge>
+                      {expense.is_reimbursable && expense.reimbursement_status && (
+                        <Badge
+                          variant="outline"
+                          className={`gap-1 text-xs ${
+                            expense.reimbursement_status === "reimbursed"
+                              ? "text-green-600"
+                              : expense.reimbursement_status === "rejected"
+                                ? "text-destructive"
+                                : "text-blue-600"
+                          }`}
+                        >
+                          <Briefcase className="h-3 w-3" />
+                          {REIMBURSEMENT_STATUS_LABELS[expense.reimbursement_status]}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <span className="shrink-0 font-semibold">

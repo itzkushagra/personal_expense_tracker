@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { outOfPocket } from "@/types";
 
 export async function GET() {
   const supabase = await createClient();
@@ -21,14 +22,15 @@ export async function GET() {
 
   const { data: expenses } = await supabase
     .from("expenses")
-    .select("category, amount")
+    .select("category, amount, is_reimbursable, reimbursement_status, reimbursed_amount")
     .eq("user_id", user.id)
     .gte("date", monthStart)
     .lte("date", monthEnd);
 
+  // Company-reimbursable spends don't eat into your own budget.
   const spentByCategory: Record<string, number> = {};
   for (const exp of expenses || []) {
-    spentByCategory[exp.category] = (spentByCategory[exp.category] || 0) + Number(exp.amount);
+    spentByCategory[exp.category] = (spentByCategory[exp.category] || 0) + outOfPocket(exp);
   }
 
   const enriched = (budgets || []).map((b) => {

@@ -19,6 +19,9 @@ import {
   Target,
   CalendarClock,
   BarChart3,
+  Home,
+  HandCoins,
+  Briefcase,
 } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -27,7 +30,10 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/expenses/add", label: "Add Expense", icon: PlusCircle },
+  { href: "/rent", label: "Rent & Home", icon: Home },
   { href: "/accounts", label: "Accounts", icon: Landmark },
+  { href: "/held-money", label: "Held Money", icon: HandCoins },
+  { href: "/reimbursements", label: "Reimbursements", icon: Briefcase },
   { href: "/budgets", label: "Budgets", icon: PieChart },
   { href: "/goals", label: "Goals", icon: Target },
   { href: "/bills", label: "Bills", icon: CalendarClock },
@@ -53,7 +59,7 @@ export function Sidebar() {
         <Wallet className="h-7 w-7 text-primary" />
         <span className="text-xl font-bold">SpendWise</span>
       </div>
-      <nav className="flex-1 space-y-1 px-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2">
         {navItems.map((item) => (
           <Link
             key={item.href}

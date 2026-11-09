@@ -1,10 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { computeNetWorth } from "@/lib/net-worth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // ?current=1 returns today's live figure instead of the snapshot history.
+  if (new URL(request.url).searchParams.get("current")) {
+    return NextResponse.json({ data: await computeNetWorth(supabase, user.id) });
+  }
 
   const { data, error } = await supabase
     .from("net_worth_snapshots")
@@ -21,26 +27,7 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("is_active", true);
-
-  if (!accounts) return NextResponse.json({ error: "No accounts" }, { status: 404 });
-
-  const breakdown: Record<string, number> = {};
-  let totalAssets = 0;
-  let totalLiabilities = 0;
-
-  for (const acc of accounts) {
-    breakdown[acc.name] = Number(acc.balance);
-    if (acc.type === "credit_card" || acc.type === "loan") {
-      totalLiabilities += Math.abs(Number(acc.balance));
-    } else {
-      totalAssets += Number(acc.balance);
-    }
-  }
+  const nw = await computeNetWorth(supabase, user.id);
 
   const today = new Date().toISOString().split("T")[0];
   const { data, error } = await supabase
@@ -49,10 +36,10 @@ export async function POST() {
       {
         user_id: user.id,
         date: today,
-        total_assets: totalAssets,
-        total_liabilities: totalLiabilities,
-        net_worth: totalAssets - totalLiabilities,
-        breakdown,
+        total_assets: nw.total_assets,
+        total_liabilities: nw.total_liabilities,
+        net_worth: nw.net_worth,
+        breakdown: nw.breakdown,
       },
       { onConflict: "user_id,date" }
     )

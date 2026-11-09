@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { EXPENSE_CATEGORIES } from "@/types";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -9,19 +10,14 @@ export const geminiModel = genAI.getGenerativeModel({
 export async function categorizeExpense(
   description: string
 ): Promise<string> {
-  const prompt = `You are an expense categorizer. Given an expense description, return ONLY the category name from this list:
-- Food & Dining
-- Groceries
-- Transport
-- Shopping
-- Bills & Utilities
-- Entertainment
-- Health
-- Education
-- Subscriptions
-- Travel
-- Gifts
-- Miscellaneous
+  const prompt = `You are an expense categorizer for someone living in a rented flat in India. Given an expense description, return ONLY the category name from this list:
+${EXPENSE_CATEGORIES.map((c) => `- ${c}`).join("\n")}
+
+Guidance:
+- Rent: monthly flat rent paid to the landlord
+- Home & Maintenance: society maintenance, repairs, plumber, electrician, painting, furniture, appliances, cleaning supplies
+- Household Help: maid, cook, cleaner, laundry/ironing, house help salary
+- Bills & Utilities: electricity, water, gas cylinder/PNG, internet/WiFi, mobile recharge
 
 Expense description: "${description}"
 
@@ -30,22 +26,7 @@ Return ONLY the category name, nothing else.`;
   const result = await geminiModel.generateContent(prompt);
   const category = result.response.text().trim();
 
-  const validCategories = [
-    "Food & Dining",
-    "Groceries",
-    "Transport",
-    "Shopping",
-    "Bills & Utilities",
-    "Entertainment",
-    "Health",
-    "Education",
-    "Subscriptions",
-    "Travel",
-    "Gifts",
-    "Miscellaneous",
-  ];
-
-  return validCategories.includes(category) ? category : "Miscellaneous";
+  return (EXPENSE_CATEGORIES as readonly string[]).includes(category) ? category : "Miscellaneous";
 }
 
 export async function parseVoiceInput(
@@ -79,7 +60,8 @@ export async function generateTips(
   totalSpent: number,
   prevMonthTotal: number | null
 ): Promise<string[]> {
-  const prompt = `You are a personal finance advisor. Based on this month's spending data, give 3-5 specific, actionable tips to save money. Be concise (1-2 sentences each). Use Indian Rupees (₹).
+  const prompt = `You are a personal finance advisor. Based on this month's spending data, give 3-5 specific, actionable tips to save money. Be concise (1-2 sentences each).
+The user lives in a rented flat. Rent is a fixed cost, so focus on variable spending (utilities, household help, food, transport, shopping); mention rent only if housing costs look unusually high relative to total spending. Amounts are out-of-pocket only: company-reimbursable expenses are already excluded. Use Indian Rupees (₹).
 
 Total spent this month: ₹${totalSpent}
 ${prevMonthTotal !== null ? `Last month total: ₹${prevMonthTotal}` : "No previous month data."}

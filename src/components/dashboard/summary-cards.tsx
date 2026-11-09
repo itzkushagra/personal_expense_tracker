@@ -20,6 +20,8 @@ interface SummaryCardsProps {
   transactionCount: number;
   dailyAverage: number;
   prevMonthTotal: number | null;
+  /** Company-reimbursable spend left out of totalSpent. */
+  reimbursableAmount?: number;
 }
 
 export function SummaryCards({
@@ -27,6 +29,7 @@ export function SummaryCards({
   transactionCount,
   dailyAverage,
   prevMonthTotal,
+  reimbursableAmount = 0,
 }: SummaryCardsProps) {
   const changePct =
     prevMonthTotal !== null && prevMonthTotal > 0
@@ -39,6 +42,10 @@ export function SummaryCards({
       value: formatCurrency(totalSpent),
       icon: IndianRupee,
       change: changePct,
+      subtitle:
+        reimbursableAmount > 0
+          ? `excl. ${formatCurrency(reimbursableAmount)} company-reimbursable`
+          : undefined,
     },
     {
       title: "Transactions",

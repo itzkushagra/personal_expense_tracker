@@ -19,10 +19,14 @@ import {
   type BudgetWithSpent,
   type Goal,
   type Bill,
-  type Account,
-  ACCOUNT_TYPE_COLORS,
+  type Rental,
+  type HeldFundWithBalance,
   CATEGORY_COLORS,
+  HOUSING_CATEGORIES,
+  outOfPocket,
+  reimbursementDue,
 } from "@/types";
+import type { NetWorthBreakdown } from "@/lib/net-worth";
 import {
   Loader2,
   Landmark,
@@ -35,8 +39,11 @@ import {
   Shield,
   TrendingUp,
   TrendingDown,
+  Home,
+  HandCoins,
+  Briefcase,
 } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, daysUntil } from "@/lib/utils";
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -46,7 +53,10 @@ export default function DashboardPage() {
   const [budgets, setBudgets] = useState<BudgetWithSpent[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [netWorth, setNetWorth] = useState<NetWorthBreakdown | null>(null);
+  const [rental, setRental] = useState<Rental | null>(null);
+  const [heldFunds, setHeldFunds] = useState<HeldFundWithBalance[]>([]);
+  const [claims, setClaims] = useState<Expense[]>([]);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -55,22 +65,28 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, accountsRes] = await Promise.all([
+      const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, netWorthRes, rentalRes, heldRes, claimsRes] = await Promise.all([
         fetch(`/api/expenses?month=${currentMonth}&year=${currentYear}&limit=1000`),
         fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
         fetch("/api/budgets"),
         fetch("/api/goals"),
         fetch("/api/bills"),
-        fetch("/api/accounts"),
+        fetch("/api/net-worth?current=1"),
+        fetch("/api/rental"),
+        fetch("/api/held-funds"),
+        fetch("/api/reimbursements"),
       ]);
 
-      const [expensesJson, summaryJson, budgetsJson, goalsJson, billsJson, accountsJson] = await Promise.all([
+      const [expensesJson, summaryJson, budgetsJson, goalsJson, billsJson, netWorthJson, rentalJson, heldJson, claimsJson] = await Promise.all([
         expensesRes.json(),
         summaryRes.json(),
         budgetsRes.json(),
         goalsRes.json(),
         billsRes.json(),
-        accountsRes.json(),
+        netWorthRes.json(),
+        rentalRes.json(),
+        heldRes.json(),
+        claimsRes.json(),
       ]);
 
       setExpenses(expensesJson.data || []);
@@ -78,7 +94,10 @@ export default function DashboardPage() {
       setBudgets(budgetsJson.data || []);
       setGoals(goalsJson.data || []);
       setBills(billsJson.data || []);
-      setAccounts(accountsJson.data || []);
+      setNetWorth(netWorthJson.data || null);
+      setRental(rentalJson.data || null);
+      setHeldFunds(heldJson.data || []);
+      setClaims(claimsJson.data || []);
 
       const trend: Record<string, number> = {};
       for (let i = 5; i >= 0; i--) {
@@ -92,7 +111,7 @@ export default function DashboardPage() {
       for (const exp of allExpJson.data || []) {
         const d = new Date(exp.date);
         const key = d.toLocaleString("en-IN", { month: "short", year: "2-digit" });
-        if (key in trend) trend[key] += Number(exp.amount);
+        if (key in trend) trend[key] += outOfPocket(exp);
       }
 
       setTrendData(Object.entries(trend).map(([month, total]) => ({ month, total })));
@@ -113,19 +132,25 @@ export default function DashboardPage() {
     );
   }
 
-  const totalSpent = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  // All spending figures are out-of-pocket: company-reimbursable expenses are left out.
+  const totalSpent = expenses.reduce((s, e) => s + outOfPocket(e), 0);
+  const reimbursableThisMonth = expenses.reduce((s, e) => s + Number(e.amount) - outOfPocket(e), 0);
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   const currentDay = Math.min(now.getDate(), daysInMonth);
   const dailyAverage = currentDay > 0 ? totalSpent / currentDay : 0;
 
   const categoryBreakdown: Record<string, number> = {};
   for (const e of expenses) {
-    categoryBreakdown[e.category] = (categoryBreakdown[e.category] || 0) + Number(e.amount);
+    const own = outOfPocket(e);
+    if (own > 0) categoryBreakdown[e.category] = (categoryBreakdown[e.category] || 0) + own;
   }
 
+  // Rent is a once-a-month lump sum, so leave it out of the daily chart.
   const dailyMap: Record<string, number> = {};
   for (const e of expenses) {
-    dailyMap[e.date] = (dailyMap[e.date] || 0) + Number(e.amount);
+    if (e.category === "Rent") continue;
+    const own = outOfPocket(e);
+    if (own > 0) dailyMap[e.date] = (dailyMap[e.date] || 0) + own;
   }
   const dailySpending: DailySpending[] = Object.entries(dailyMap)
     .map(([date, amount]) => ({ date, amount }))
@@ -133,10 +158,18 @@ export default function DashboardPage() {
 
   const prevMonthTotal = summary?.comparison?.prev_total ?? null;
 
-  // Net worth
-  const totalAssets = accounts.filter((a) => a.type !== "credit_card" && a.type !== "loan").reduce((s, a) => s + Number(a.balance), 0);
-  const totalLiabilities = accounts.filter((a) => a.type === "credit_card" || a.type === "loan").reduce((s, a) => s + Math.abs(Number(a.balance)), 0);
-  const netWorth = totalAssets - totalLiabilities;
+  // Rent, held money, reimbursements
+  const rentPaid = expenses.filter((e) => e.category === "Rent").reduce((s, e) => s + Number(e.amount), 0);
+  const isRentPaid = !!rental && Number(rental.monthly_rent) > 0 && rentPaid >= Number(rental.monthly_rent);
+  const rentOverdue = !!rental && !isRentPaid && now.getDate() > rental.rent_due_day;
+  const housingSpent = expenses
+    .filter((e) => HOUSING_CATEGORIES.includes(e.category))
+    .reduce((s, e) => s + outOfPocket(e), 0);
+  const activeHeld = heldFunds.filter((f) => f.balance > 0);
+  const totalHeld = activeHeld.reduce((s, f) => s + f.balance, 0);
+  const heldOverdue = activeHeld.filter((f) => f.expected_return_date && daysUntil(f.expected_return_date) < 0);
+  const claimsDue = claims.reduce((s, c) => s + reimbursementDue(c), 0);
+  const claimsToSubmit = claims.filter((c) => c.reimbursement_status === "pending");
 
   // Budget alerts
   const overBudget = budgets.filter((b) => b.percentage > 100);
@@ -172,7 +205,72 @@ export default function DashboardPage() {
         transactionCount={expenses.length}
         dailyAverage={dailyAverage}
         prevMonthTotal={prevMonthTotal}
+        reimbursableAmount={reimbursableThisMonth}
       />
+
+      {/* Rent, held money & reimbursements */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Link href="/rent">
+          <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${rentOverdue ? "border-red-200 dark:border-red-900" : ""}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Rent & Home</CardTitle>
+              <Home className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              {rental ? (
+                <>
+                  <div className={`text-xl font-bold ${isRentPaid ? "text-green-600" : rentOverdue ? "text-destructive" : ""}`}>
+                    {isRentPaid ? "Rent paid" : rentOverdue ? "Rent overdue" : `Due on ${rental.rent_due_day}`}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    housing {formatCurrency(housingSpent)}
+                    {totalSpent > 0 && ` · ${((housingSpent / totalSpent) * 100).toFixed(0)}% of spending`}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold">—</div>
+                  <p className="text-xs text-muted-foreground">Set up your flat</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/held-money">
+          <Card className={`cursor-pointer transition-colors hover:bg-muted/50 ${heldOverdue.length > 0 ? "border-red-200 dark:border-red-900" : ""}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Held for Others</CardTitle>
+              <HandCoins className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-bold">{totalHeld > 0 ? formatCurrency(totalHeld) : "—"}</div>
+              <p className={`text-xs ${heldOverdue.length > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                {heldOverdue.length > 0
+                  ? `${heldOverdue.length} overdue to return`
+                  : activeHeld.length > 0
+                    ? `owed back to ${activeHeld.length} ${activeHeld.length === 1 ? "person" : "people"}`
+                    : "Nothing held"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/reimbursements">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Company Owes You</CardTitle>
+              <Briefcase className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-bold text-blue-600">{claimsDue > 0 ? formatCurrency(claimsDue) : "—"}</div>
+              <p className={`text-xs ${claimsToSubmit.length > 0 ? "text-yellow-600" : "text-muted-foreground"}`}>
+                {claimsToSubmit.length > 0 ? `${claimsToSubmit.length} not submitted yet` : "pending reimbursements"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
 
       {/* Quick Overview Row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -184,10 +282,10 @@ export default function DashboardPage() {
               <Landmark className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={`text-xl font-bold ${netWorth >= 0 ? "text-green-600" : "text-destructive"}`}>
-                {accounts.length > 0 ? formatCurrency(netWorth) : "—"}
+              <div className={`text-xl font-bold ${(netWorth?.net_worth ?? 0) >= 0 ? "text-green-600" : "text-destructive"}`}>
+                {netWorth && netWorth.account_count > 0 ? formatCurrency(netWorth.net_worth) : "—"}
               </div>
-              <p className="text-xs text-muted-foreground">{accounts.length} accounts</p>
+              <p className="text-xs text-muted-foreground">{netWorth?.account_count ?? 0} accounts</p>
             </CardContent>
           </Card>
         </Link>

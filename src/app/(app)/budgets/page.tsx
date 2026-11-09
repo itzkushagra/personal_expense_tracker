@@ -28,11 +28,14 @@ import {
   Pencil,
   AlertTriangle,
   CheckCircle2,
+  Home,
 } from "lucide-react";
 import {
   type BudgetWithSpent,
+  type Rental,
   EXPENSE_CATEGORIES,
   CATEGORY_COLORS,
+  HOUSING_CATEGORIES,
 } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
@@ -44,12 +47,16 @@ export default function BudgetsPage() {
   const [editing, setEditing] = useState<BudgetWithSpent | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [rental, setRental] = useState<Rental | null>(null);
+  const [showRenterSetup, setShowRenterSetup] = useState(false);
+
   const fetchBudgets = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/budgets");
-      const json = await res.json();
+      const [res, rentalRes] = await Promise.all([fetch("/api/budgets"), fetch("/api/rental")]);
+      const [json, rentalJson] = await Promise.all([res.json(), rentalRes.json()]);
       setBudgets(json.data || []);
+      setRental(rentalJson.data || null);
     } catch {
       toast.error("Failed to load budgets");
     } finally {
@@ -86,6 +93,48 @@ export default function BudgetsPage() {
       fetchBudgets();
     } catch {
       toast.error("Failed to save budget");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const missingHousing = HOUSING_CATEGORIES.filter(
+    (cat) => !budgets.some((b) => b.category === cat && b.period === "monthly")
+  );
+
+  function suggestedAmount(cat: string) {
+    if (cat === "Rent") return rental ? Number(rental.monthly_rent) : "";
+    if (cat === "Home & Maintenance") return rental ? Number(rental.maintenance_charges) + 500 : 1000;
+    if (cat === "Household Help") return 3000;
+    return 2500; // Bills & Utilities: electricity, water, gas, internet, mobile
+  }
+
+  async function handleRenterSetup(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    const fd = new FormData(e.currentTarget);
+    const toCreate = missingHousing
+      .map((cat) => ({ category: cat, amount: parseFloat(fd.get(cat) as string) }))
+      .filter((b) => b.amount > 0);
+
+    try {
+      const results = await Promise.all(
+        toCreate.map((b) =>
+          fetch("/api/budgets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            // Rent is fixed, so only warn once it is actually exceeded.
+            body: JSON.stringify({ ...b, period: "monthly", alert_threshold: b.category === "Rent" ? 100 : 80 }),
+          })
+        )
+      );
+      if (results.some((r) => !r.ok)) throw new Error();
+      toast.success(`${toCreate.length} housing budgets created`);
+      setShowRenterSetup(false);
+      fetchBudgets();
+    } catch {
+      toast.error("Failed to create some budgets");
+      fetchBudgets();
     } finally {
       setSaving(false);
     }
@@ -144,6 +193,7 @@ export default function BudgetsPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               {totalBudget > 0 ? `${((totalSpent / totalBudget) * 100).toFixed(0)}% of budget` : "no budget set"}
+              {" · excludes company-reimbursable"}
             </p>
           </CardContent>
         </Card>
@@ -174,6 +224,47 @@ export default function BudgetsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Renter quick setup */}
+      {missingHousing.length > 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Home className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="font-medium">Living on rent? Set up housing budgets</p>
+                <p className="text-sm text-muted-foreground">
+                  Add monthly limits for {missingHousing.join(", ")}.
+                  {rental ? " Rent is pre-filled from your flat details." : ""}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setShowRenterSetup(true)}>Set up</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={showRenterSetup} onOpenChange={setShowRenterSetup}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Monthly Housing Budgets</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleRenterSetup} className="space-y-4">
+            {missingHousing.map((cat) => (
+              <div key={cat} className="flex items-center gap-3">
+                <div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                <Label htmlFor={`rs-${cat}`} className="flex-1">{cat}</Label>
+                <Input id={`rs-${cat}`} name={cat} type="number" min="0" step="1" className="w-32" defaultValue={suggestedAmount(cat)} />
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Leave a field at 0 to skip it. You can edit these later.</p>
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Create budgets
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Budget List */}
       <Card>
