@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { todayInAppZone } from "@/lib/dates";
+import { monthRange, todayInAppZone } from "@/lib/dates";
 
 /** First day of the month containing a YYYY-MM-DD date. */
 function monthStart(date: string) {
@@ -22,14 +22,17 @@ export async function GET(request: NextRequest) {
     .from("incomes")
     .select("*")
     .eq("user_id", user.id)
-    .order("for_month", { ascending: false })
     .order("date", { ascending: false });
 
-  // Month filters apply to the month the income belongs to, not the day it arrived.
+  // Month filters use the day the money arrives (or is expected), because
+  // that is the month it is there to spend: October's salary paid on
+  // 3 November is November's money. for_month only records which month the
+  // work was for.
   if (month && year) {
-    query = query.eq("for_month", `${year}-${month.padStart(2, "0")}-01`);
+    const { start, end } = monthRange(Number(year), Number(month));
+    query = query.gte("date", start).lte("date", end);
   } else if (from) {
-    query = query.gte("for_month", monthStart(from));
+    query = query.gte("date", monthStart(from));
   }
   if (pending) query = query.eq("is_received", false);
 

@@ -68,15 +68,19 @@ function guessForMonth(date: string, type: IncomeType) {
   return `${y}-${pad(m)}`;
 }
 
-/** Same day-offset from the earned month, shifted to a new earned month (clamped to month length). */
-function shiftPayDate(source: Income, targetForMonth: string) {
+/**
+ * Repeat an income in a new pay month: same day of the month (clamped to the
+ * month's length), and the "earned for" month moved forward by the same amount.
+ */
+function repeatInPayMonth(source: Income, payMonthKey: string) {
+  const [py, pm] = payMonthKey.split("-").map(Number);
+  const [sy, sm, sd] = source.date.split("-").map(Number);
+  const lastDay = new Date(py, pm, 0).getDate();
+  const date = `${py}-${pad(pm)}-${pad(Math.min(sd, lastDay))}`;
+  const shift = (py - sy) * 12 + (pm - sm);
   const [fy, fm] = source.for_month.split("-").map(Number);
-  const [dy, dm, dd] = source.date.split("-").map(Number);
-  const monthsAfter = (dy - fy) * 12 + (dm - fm);
-  const [ty, tm] = targetForMonth.split("-").map(Number);
-  const payMonth = new Date(ty, tm - 1 + monthsAfter, 1);
-  const lastDay = new Date(payMonth.getFullYear(), payMonth.getMonth() + 1, 0).getDate();
-  return `${payMonth.getFullYear()}-${pad(payMonth.getMonth() + 1)}-${pad(Math.min(dd, lastDay))}`;
+  const f = new Date(fy, fm - 1 + shift, 1);
+  return { date, for_month: `${f.getFullYear()}-${pad(f.getMonth() + 1)}-01` };
 }
 
 export default function IncomePage() {
@@ -100,6 +104,7 @@ export default function IncomePage() {
   const [fReceived, setFReceived] = useState(true);
 
   const { month, year } = cursor;
+  // The month being viewed = the month the money arrives in and is spent.
   const forMonthKey = `${year}-${pad(month)}-01`;
   const prev = month === 1 ? { month: 12, year: year - 1 } : { month: month - 1, year };
   const isCurrentMonth = month === today.getMonth() + 1 && year === today.getFullYear();
@@ -152,8 +157,8 @@ export default function IncomePage() {
       const date = isCurrentMonth ? todayStr : `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
       setFType("salary");
       setFDate(date);
-      setFForMonth(`${year}-${pad(month)}`);
-      setFForMonthTouched(!isCurrentMonth);
+      setFForMonth(guessForMonth(date, "salary"));
+      setFForMonthTouched(false);
       setFReceived(true);
     }
     setShowDialog(true);
@@ -213,7 +218,8 @@ export default function IncomePage() {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
       toast.success(
-        `${editing ? "Updated" : fReceived ? "Added" : "Added as expected"}: ${body.source}, ${monthName(body.for_month)}`
+        `${editing ? "Updated" : fReceived ? "Added" : "Added as expected"}: ${body.source} in ${monthName(body.date)}` +
+          (body.date.slice(0, 7) !== body.for_month.slice(0, 7) ? ` (for ${monthName(body.for_month)})` : "")
       );
       setShowDialog(false);
       setEditing(null);
@@ -247,7 +253,7 @@ export default function IncomePage() {
     try {
       const results = await Promise.all(
         missingSalaries.map((p) => {
-          const date = shiftPayDate(p, forMonthKey);
+          const { date, for_month } = repeatInPayMonth(p, forMonthKey);
           return fetch("/api/incomes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -256,7 +262,7 @@ export default function IncomePage() {
               source: p.source,
               type: "salary",
               date,
-              for_month: forMonthKey,
+              for_month,
               is_received: date <= todayStr,
               note: "",
             }),
@@ -264,7 +270,7 @@ export default function IncomePage() {
         })
       );
       if (results.some((r) => !r.ok)) throw new Error();
-      toast.success(`Salary added for ${monthLabel}`);
+      toast.success(`Salary added to ${monthLabel}`);
       fetchData();
     } catch {
       toast.error("Failed to add salary");
@@ -329,7 +335,7 @@ export default function IncomePage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Income</h1>
-          <p className="text-muted-foreground">Grouped by the month it was earned for, not the day it arrived</p>
+          <p className="text-muted-foreground">Counted in the month you receive it, the month it&apos;s there to spend</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => shiftMonth(-1)} aria-label="Previous month">
@@ -395,7 +401,7 @@ export default function IncomePage() {
                 <Input id="inc-date" type="date" value={fDate} onChange={(e) => onDateChange(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="inc-for">For month</Label>
+                <Label htmlFor="inc-for">Earned for (month)</Label>
                 <Input
                   id="inc-for"
                   type="month"
@@ -407,7 +413,7 @@ export default function IncomePage() {
             </div>
             {fType === "salary" && fDate && fForMonth && fDate.slice(0, 7) !== fForMonth && (
               <p className="text-xs text-muted-foreground">
-                Paid {formatDate(fDate)}, counted as {monthName(`${fForMonth}-01`, "long")} salary.
+                Earned for {monthName(`${fForMonth}-01`, "long")}, counted as {monthName(fDate, "long")} money to spend.
               </p>
             )}
             <div className="space-y-2">
@@ -464,7 +470,7 @@ export default function IncomePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Earned</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Income</CardTitle>
                 <Wallet className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
