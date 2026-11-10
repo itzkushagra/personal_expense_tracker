@@ -4,12 +4,13 @@ import { test, expect, hasHorizontalOverflow, expectTheme } from "./fixtures";
 
 test.describe("signed out", () => {
   for (const path of ["/login", "/signup"]) {
-    test(`${path} renders without errors or sideways scroll`, async ({ page, theme }) => {
+    test(`${path} renders without errors or sideways scroll`, async ({ page, theme }, testInfo) => {
       await page.goto(path);
       await expect(page.getByLabel("Email")).toBeVisible();
       await expect(page.getByLabel("Password")).toBeVisible();
       await expectTheme(page, theme);
       expect(await hasHorizontalOverflow(page)).toBe(false);
+      await page.screenshot({ path: testInfo.outputPath(`${path.slice(1)}.png`), fullPage: true });
     });
   }
 
