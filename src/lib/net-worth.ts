@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { type LoanDirection, loanBalance, reimbursementDue } from "@/types";
+import { type Account, type Debt, type LoanDirection, loanBalance, reimbursementDue } from "@/types";
+import { withLiveBalances } from "@/lib/ledger";
 
 export interface NetWorthBreakdown {
   total_assets: number;
@@ -23,16 +24,31 @@ export interface NetWorthBreakdown {
   account_count: number;
 }
 
+/**
+ * Debt Tracker entries that add to liabilities. An entry linked to an account that is
+ * counted (debts.account_id) is the same card or loan, so it is left out; everything
+ * else is counted on its own. Each underlying liability is therefore counted once.
+ */
+export function countedDebts<D extends Pick<Debt, "name" | "current_balance" | "account_id">>(
+  debts: D[],
+  countedAccountIds: Set<string>
+): { debt: D; balance: number }[] {
+  return debts
+    .filter((d) => !(d.account_id && countedAccountIds.has(d.account_id)))
+    .map((debt) => ({ debt, balance: Math.max(0, Number(debt.current_balance)) }))
+    .filter((x) => x.balance > 0);
+}
+
 export async function computeNetWorth(supabase: SupabaseClient, userId: string): Promise<NetWorthBreakdown> {
-  const [{ data: accounts }, { data: rental }, { data: loans }, { data: debts }, { data: claims }, { data: pendingIncome }] = await Promise.all([
-    supabase.from("accounts").select("name, type, balance").eq("user_id", userId).eq("is_active", true),
+  const [{ data: rawAccounts }, { data: rental }, { data: loans }, { data: debts }, { data: claims }, { data: pendingIncome }] = await Promise.all([
+    supabase.from("accounts").select("*").eq("user_id", userId).eq("is_active", true),
     supabase.from("rentals").select("security_deposit").eq("user_id", userId).maybeSingle(),
     supabase
       .from("held_funds")
       .select("direction, entries:held_fund_entries(type, amount)")
       .eq("user_id", userId)
       .eq("is_settled", false),
-    supabase.from("debts").select("name, current_balance").eq("user_id", userId).eq("is_active", true),
+    supabase.from("debts").select("id, name, current_balance, account_id").eq("user_id", userId).eq("is_active", true),
     supabase
       .from("expenses")
       .select("amount, is_reimbursable, reimbursement_status")
@@ -41,6 +57,9 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
       .in("reimbursement_status", ["pending", "submitted"]),
     supabase.from("incomes").select("amount").eq("user_id", userId).eq("is_received", false),
   ]);
+
+  // Balances are calculated from every linked transaction, not typed in.
+  const accounts = await withLiveBalances(supabase, userId, (rawAccounts || []) as Account[]);
 
   const breakdown: Record<string, number> = {};
   let totalAssets = 0;
@@ -74,18 +93,12 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     totalAssets += incomeDue;
   }
 
-  // Debt Tracker entries (EMIs, personal loans, credit cards) are liabilities.
-  // Credit-card accounts already carry their own balance, so only count tracked
-  // debts by name when no account of the same name exists.
-  const accountNames = new Set((accounts || []).map((a) => a.name.trim().toLowerCase()));
+  // Debt Tracker entries (EMIs, personal loans, credit cards) are liabilities, except
+  // those linked to an account above: that account's balance already counts them.
   let trackedDebt = 0;
-  for (const d of debts || []) {
-    if (accountNames.has(d.name.trim().toLowerCase())) continue;
-    const bal = Math.max(0, Number(d.current_balance));
-    if (bal > 0) {
-      breakdown[`Debt: ${d.name}`] = -bal;
-      trackedDebt += bal;
-    }
+  for (const { debt, balance } of countedDebts(debts || [], new Set(accounts.map((a) => a.id)))) {
+    breakdown[`Debt: ${debt.name}`] = -balance;
+    trackedDebt += balance;
   }
   totalLiabilities += trackedDebt;
 
