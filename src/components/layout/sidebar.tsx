@@ -22,24 +22,54 @@ import {
   HandCoins,
   Briefcase,
   Banknote,
+  CalendarRange,
+  Settings,
+  PlusCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/expenses", label: "Expenses", icon: Receipt },
-  { href: "/income", label: "Income", icon: Banknote },
-  { href: "/rent", label: "Rent & Home", icon: Home },
-  { href: "/accounts", label: "Accounts", icon: Landmark },
-  { href: "/people", label: "People & Loans", icon: HandCoins },
-  { href: "/reimbursements", label: "Reimbursements", icon: Briefcase },
-  { href: "/budgets", label: "Budgets", icon: PieChart },
-  { href: "/goals", label: "Goals", icon: Target },
-  { href: "/bills", label: "Bills", icon: CalendarClock },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/tips", label: "Saving Tips", icon: Lightbulb },
+const navGroups = [
+  {
+    title: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/yearly", label: "Yearly", icon: CalendarRange },
+      { href: "/reports", label: "Reports", icon: BarChart3 },
+    ],
+  },
+  {
+    title: "Money",
+    items: [
+      { href: "/expenses", label: "Expenses", icon: Receipt },
+      { href: "/income", label: "Income", icon: Banknote },
+      { href: "/accounts", label: "Accounts", icon: Landmark },
+      { href: "/people", label: "People & Loans", icon: HandCoins },
+      { href: "/reimbursements", label: "Reimbursements", icon: Briefcase },
+    ],
+  },
+  {
+    title: "Plan",
+    items: [
+      { href: "/budgets", label: "Budgets", icon: PieChart },
+      { href: "/bills", label: "Bills", icon: CalendarClock },
+      { href: "/goals", label: "Goals", icon: Target },
+      { href: "/rent", label: "Rent & Home", icon: Home },
+    ],
+  },
+  {
+    title: "More",
+    items: [
+      { href: "/tips", label: "Saving Tips", icon: Lightbulb },
+      { href: "/settings", label: "Settings & Data", icon: Settings },
+    ],
+  },
 ];
+
+/** A section is active on its own page and any page below it (e.g. /accounts/<id>). */
+function isActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -55,29 +85,44 @@ export function Sidebar() {
 
   const nav = (
     <>
-      <div className="flex items-center gap-2 px-4 py-6">
+      <div className="flex items-center gap-2 px-4 py-5">
         <Wallet className="h-7 w-7 text-primary" />
         <span className="text-xl font-bold">SpendWise</span>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-2">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setMobileOpen(false)}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              pathname === item.href
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </Link>
+      <div className="px-3 pb-3">
+        {/* Adding happens in the pop-up on the Expenses page. */}
+        <Link href="/expenses?add=1" onClick={() => setMobileOpen(false)}>
+          <Button className="w-full justify-start gap-2">
+            <PlusCircle className="h-4 w-4" /> Add Expense
+          </Button>
+        </Link>
+      </div>
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-4">
+        {navGroups.map((group) => (
+          <div key={group.title} className="space-y-0.5">
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              {group.title}
+            </p>
+            {group.items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  isActive(pathname, item.href)
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
+          </div>
         ))}
       </nav>
-      <div className="border-t p-4 space-y-2">
+      <div className="space-y-2 border-t p-4">
         <div className="flex items-center justify-between px-3">
           <span className="text-sm text-muted-foreground">Theme</span>
           <ThemeToggle />
@@ -98,8 +143,9 @@ export function Sidebar() {
     <>
       {/* Mobile toggle */}
       <button
-        className="fixed top-4 left-4 z-50 rounded-lg bg-background p-2 shadow-md md:hidden"
+        className="fixed left-4 top-4 z-50 rounded-lg bg-background p-2 shadow-md md:hidden"
         onClick={() => setMobileOpen(!mobileOpen)}
+        aria-label={mobileOpen ? "Close menu" : "Open menu"}
       >
         {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </button>
@@ -127,5 +173,37 @@ export function Sidebar() {
         {nav}
       </aside>
     </>
+  );
+}
+
+const mobileTabs = [
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/expenses", label: "Expenses", icon: Receipt },
+  { href: "/income", label: "Income", icon: Banknote },
+  { href: "/accounts", label: "Accounts", icon: Landmark },
+];
+
+/** Bottom tab bar on phones; the quick-add button sits in the middle. */
+export function MobileTabBar({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const tab = (t: (typeof mobileTabs)[number]) => (
+    <Link
+      key={t.href}
+      href={t.href}
+      className={cn(
+        "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
+        isActive(pathname, t.href) ? "text-primary" : "text-muted-foreground"
+      )}
+    >
+      <t.icon className="h-5 w-5" />
+      {t.label}
+    </Link>
+  );
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 flex items-end border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {mobileTabs.slice(0, 2).map(tab)}
+      <div className="-mt-6 flex flex-1 justify-center">{children}</div>
+      {mobileTabs.slice(2).map(tab)}
+    </div>
   );
 }

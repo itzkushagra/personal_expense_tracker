@@ -14,6 +14,8 @@ export interface Expense {
   reimbursement_status: ReimbursementStatus | null;
   reimbursed_amount: number;
   reimbursed_date: string | null;
+  /** Account the reimbursement was paid into. */
+  reimbursed_account_id: string | null;
   claim_reference: string;
   created_at: string;
   updated_at: string;
@@ -99,6 +101,8 @@ export interface PersonLoanEntry {
   amount: number;
   date: string;
   note: string;
+  /** Account the money came into / went out of. */
+  account_id: string | null;
   created_at: string;
 }
 
@@ -175,6 +179,8 @@ export interface Income {
   /** First day of the month this income belongs to, e.g. August salary paid in September → "2026-08-01". */
   for_month: string;
   is_received: boolean;
+  /** Account the money landed in. */
+  account_id: string | null;
   note: string;
   created_at: string;
   updated_at: string;
@@ -244,19 +250,64 @@ export interface DailySpending {
 // --- Accounts & Net Worth ---
 
 /** "loan" is kept for existing accounts; new loans belong in the Debt Tracker. */
-export type AccountType = "checking" | "savings" | "credit_card" | "loan" | "investment";
+export type AccountType = "checking" | "savings" | "cash" | "wallet" | "credit_card" | "loan" | "investment";
+
+/** Account types whose balance is money you owe (spending raises it). */
+export const LIABILITY_ACCOUNT_TYPES: readonly AccountType[] = ["credit_card", "loan"];
 
 export interface Account {
   id: string;
   user_id: string;
   name: string;
   type: AccountType;
+  /**
+   * Current balance, calculated from opening_balance plus every linked transaction
+   * since opening_date. For credit cards and loans it is the amount owed.
+   */
   balance: number;
+  opening_balance: number;
+  opening_date: string;
+  is_default: boolean;
   institution: string;
   color: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface Transfer {
+  id: string;
+  user_id: string;
+  from_account_id: string;
+  to_account_id: string;
+  amount: number;
+  date: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type LedgerKind =
+  | "expense"
+  | "income"
+  | "loan"
+  | "reimbursement"
+  | "transfer_in"
+  | "transfer_out"
+  /** Principal repaid on a Debt Tracker loan or card through a bill payment. */
+  | "debt_payment";
+
+/** One line on an account statement. amount is signed: + money in, − money out. */
+export interface LedgerEntry {
+  kind: LedgerKind;
+  /** id of the source row (expense, income, loan entry, transfer). */
+  id: string;
+  date: string;
+  description: string;
+  detail: string;
+  amount: number;
+  /** Balance after this entry, in the account's own terms (owed for credit cards/loans). */
+  running_balance: number;
 }
 
 export interface NetWorthSnapshot {
@@ -283,6 +334,11 @@ export interface Debt {
   start_date: string;
   expected_payoff_date: string | null;
   is_active: boolean;
+  /**
+   * The credit card or loan account this entry describes, if it is also in Accounts.
+   * A linked entry's balance is the account's, counted once (through the account).
+   */
+  account_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -346,9 +402,32 @@ export interface Bill {
   is_auto_pay: boolean;
   is_active: boolean;
   reminder_days_before: number;
+  /** Account the bill is paid from; used for the expense when marked paid. */
+  account_id: string | null;
+  /** What paying the bill means for your money; see BILL_KIND_LABELS. */
+  kind: BillKind;
+  /** Credit card bills: the card account being paid off. */
+  to_account_id: string | null;
+  /** Card or EMI bills: the Debt Tracker entry being paid down. */
+  debt_id: string | null;
+  /** Part payments already made toward next_due_date (added by GET /api/bills). */
+  paid_toward_due?: number;
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * expense     – a normal bill; paying it is spending
+ * credit_card – paying a card; reduces what you owe, never an expense (the purchases already were)
+ * loan_emi    – an EMI; principal reduces the loan, only interest is an expense
+ */
+export type BillKind = "expense" | "credit_card" | "loan_emi";
+
+export const BILL_KIND_LABELS: Record<BillKind, string> = {
+  expense: "Regular bill",
+  credit_card: "Credit card payment",
+  loan_emi: "Loan EMI",
+};
 
 export interface BillPayment {
   id: string;
@@ -357,6 +436,29 @@ export interface BillPayment {
   amount_paid: number;
   paid_date: string;
   status: "paid" | "missed" | "late";
+  kind: BillKind;
+  /** Account the money left. */
+  account_id: string | null;
+  /** Part that paid down a card or loan (not spending). */
+  principal_amount: number;
+  /** Part that was interest (spending). */
+  interest_amount: number;
+  /** EMI late fees and other charges (spending). principal + interest + fees = amount_paid. */
+  fees_amount: number;
+  debt_id: string | null;
+  expense_id: string | null;
+  fee_expense_id: string | null;
+  transfer_id: string | null;
+  /** The due date this payment is for. */
+  occurrence_date: string | null;
+  /** True when this payment completed its due date (false = a part payment). */
+  settles_occurrence: boolean;
+  idempotency_key: string | null;
+  /** Set when the payment was reversed; the row is kept for history. */
+  reversed_at: string | null;
+  reversal_reason: string | null;
+  /** What the reversal undid: the deleted expense/transfer rows, loan balance and due dates. */
+  reversal_snapshot: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -431,8 +533,10 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  checking: "Checking",
+  checking: "Current / Salary",
   savings: "Savings",
+  cash: "Cash",
+  wallet: "UPI / Wallet",
   credit_card: "Credit Card",
   loan: "Loan",
   investment: "Investment",
@@ -441,6 +545,8 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 export const ACCOUNT_TYPE_COLORS: Record<AccountType, string> = {
   checking: "#3b82f6",
   savings: "#22c55e",
+  cash: "#a16207",
+  wallet: "#7c3aed",
   credit_card: "#ef4444",
   loan: "#f97316",
   investment: "#8b5cf6",

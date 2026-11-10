@@ -36,7 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { kind, amount, date, note } = await request.json();
+  const { kind, amount, date, note, account_id } = await request.json();
   const value = Number(amount);
   if ((kind !== "principal" && kind !== "repayment") || !(value > 0)) {
     return NextResponse.json({ error: "Invalid entry" }, { status: 400 });
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       amount: value,
       date: date || todayInAppZone(),
       note: note || "",
+      account_id: account_id || null,
     })
     .select()
     .single();
@@ -82,7 +83,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { entry_id, amount, date, note } = await request.json();
+  const { entry_id, amount, date, note, account_id } = await request.json();
   if (!entry_id) return NextResponse.json({ error: "entry_id is required" }, { status: 400 });
   if (amount !== undefined && !(Number(amount) > 0)) {
     return NextResponse.json({ error: "Amount must be positive" }, { status: 400 });
@@ -92,6 +93,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (amount !== undefined) update.amount = Number(amount);
   if (date) update.date = date;
   if (note !== undefined) update.note = note;
+  if (account_id !== undefined) update.account_id = account_id || null;
 
   const { data, error } = await supabase
     .from("held_fund_entries")

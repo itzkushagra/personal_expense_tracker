@@ -44,6 +44,7 @@ import {
   outOfPocket,
 } from "@/types";
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
+import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -68,19 +69,15 @@ function guessForMonth(date: string, type: IncomeType) {
   return `${y}-${pad(m)}`;
 }
 
-/**
- * Repeat an income in a new pay month: same day of the month (clamped to the
- * month's length), and the "earned for" month moved forward by the same amount.
- */
-function repeatInPayMonth(source: Income, payMonthKey: string) {
-  const [py, pm] = payMonthKey.split("-").map(Number);
-  const [sy, sm, sd] = source.date.split("-").map(Number);
-  const lastDay = new Date(py, pm, 0).getDate();
-  const date = `${py}-${pad(pm)}-${pad(Math.min(sd, lastDay))}`;
-  const shift = (py - sy) * 12 + (pm - sm);
+/** Same day-offset from the earned month, shifted to a new earned month (clamped to month length). */
+function shiftPayDate(source: Income, targetForMonth: string) {
   const [fy, fm] = source.for_month.split("-").map(Number);
-  const f = new Date(fy, fm - 1 + shift, 1);
-  return { date, for_month: `${f.getFullYear()}-${pad(f.getMonth() + 1)}-01` };
+  const [dy, dm, dd] = source.date.split("-").map(Number);
+  const monthsAfter = (dy - fy) * 12 + (dm - fm);
+  const [ty, tm] = targetForMonth.split("-").map(Number);
+  const payMonth = new Date(ty, tm - 1 + monthsAfter, 1);
+  const lastDay = new Date(payMonth.getFullYear(), payMonth.getMonth() + 1, 0).getDate();
+  return `${payMonth.getFullYear()}-${pad(payMonth.getMonth() + 1)}-${pad(Math.min(dd, lastDay))}`;
 }
 
 export default function IncomePage() {
@@ -102,9 +99,10 @@ export default function IncomePage() {
   const [fForMonth, setFForMonth] = useState(guessForMonth(todayStr, "salary"));
   const [fForMonthTouched, setFForMonthTouched] = useState(false);
   const [fReceived, setFReceived] = useState(true);
+  const [fAccount, setFAccount] = useState<string | null>(null);
+  const { defaultId, loaded: defaultLoaded } = useAccounts();
 
   const { month, year } = cursor;
-  // The month being viewed = the month the money arrives in and is spent.
   const forMonthKey = `${year}-${pad(month)}-01`;
   const prev = month === 1 ? { month: 12, year: year - 1 } : { month: month - 1, year };
   const isCurrentMonth = month === today.getMonth() + 1 && year === today.getFullYear();
@@ -138,6 +136,18 @@ export default function IncomePage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Quick add (/income?new=1) opens the form straight away.
+  const [autoOpened, setAutoOpened] = useState(false);
+  useEffect(() => {
+    if (autoOpened || !defaultLoaded) return;
+    setAutoOpened(true);
+    if (new URLSearchParams(window.location.search).get("new")) {
+      window.history.replaceState(null, "", "/income");
+      openDialog(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time check once accounts have loaded
+  }, [autoOpened, defaultLoaded]);
+
   function shiftMonth(delta: number) {
     setCursor(({ month: m, year: y }) => {
       const d = new Date(y, m - 1 + delta, 1);
@@ -153,13 +163,15 @@ export default function IncomePage() {
       setFForMonth(income.for_month.slice(0, 7));
       setFForMonthTouched(true);
       setFReceived(income.is_received);
+      setFAccount(income.account_id);
     } else {
       const date = isCurrentMonth ? todayStr : `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
       setFType("salary");
       setFDate(date);
-      setFForMonth(guessForMonth(date, "salary"));
-      setFForMonthTouched(false);
+      setFForMonth(`${year}-${pad(month)}`);
+      setFForMonthTouched(!isCurrentMonth);
       setFReceived(true);
+      setFAccount(defaultId);
     }
     setShowDialog(true);
   }
@@ -208,6 +220,7 @@ export default function IncomePage() {
       date: fDate || todayStr,
       for_month: `${fForMonth}-01`,
       is_received: fReceived,
+      account_id: fAccount,
       note: fd.get("note") || "",
     };
     try {
@@ -218,12 +231,12 @@ export default function IncomePage() {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
       toast.success(
-        `${editing ? "Updated" : fReceived ? "Added" : "Added as expected"}: ${body.source} in ${monthName(body.date)}` +
-          (body.date.slice(0, 7) !== body.for_month.slice(0, 7) ? ` (for ${monthName(body.for_month)})` : "")
+        `${editing ? "Updated" : fReceived ? "Added" : "Added as expected"}: ${body.source}, ${monthName(body.for_month)}`
       );
       setShowDialog(false);
       setEditing(null);
       fetchData();
+      refreshAccounts();
       fetch("/api/net-worth", { method: "POST" });
     } catch (err) {
       toast.error(err instanceof Error && err.message ? `Failed to save income: ${err.message}` : "Failed to save income");
@@ -237,11 +250,16 @@ export default function IncomePage() {
       const res = await fetch(`/api/incomes/${income.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_received: true, date: income.date > todayStr ? todayStr : income.date }),
+        body: JSON.stringify({
+          is_received: true,
+          date: income.date > todayStr ? todayStr : income.date,
+          account_id: income.account_id ?? defaultId,
+        }),
       });
       if (!res.ok) throw new Error();
       toast.success(`${income.source} (${monthName(income.for_month)}) marked as received`);
       fetchData();
+      refreshAccounts();
       fetch("/api/net-worth", { method: "POST" });
     } catch {
       toast.error("Failed to update");
@@ -253,7 +271,7 @@ export default function IncomePage() {
     try {
       const results = await Promise.all(
         missingSalaries.map((p) => {
-          const { date, for_month } = repeatInPayMonth(p, forMonthKey);
+          const date = shiftPayDate(p, forMonthKey);
           return fetch("/api/incomes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -262,15 +280,16 @@ export default function IncomePage() {
               source: p.source,
               type: "salary",
               date,
-              for_month,
+              for_month: forMonthKey,
               is_received: date <= todayStr,
+              account_id: p.account_id ?? defaultId,
               note: "",
             }),
           });
         })
       );
       if (results.some((r) => !r.ok)) throw new Error();
-      toast.success(`Salary added to ${monthLabel}`);
+      toast.success(`Salary added for ${monthLabel}`);
       fetchData();
     } catch {
       toast.error("Failed to add salary");
@@ -286,6 +305,7 @@ export default function IncomePage() {
       if (!res.ok) throw new Error();
       toast.success("Income deleted");
       fetchData();
+      refreshAccounts();
       fetch("/api/net-worth", { method: "POST" });
     } catch {
       toast.error("Failed to delete");
@@ -335,7 +355,7 @@ export default function IncomePage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Income</h1>
-          <p className="text-muted-foreground">Counted in the month you receive it, the month it&apos;s there to spend</p>
+          <p className="text-muted-foreground">Grouped by the month it was earned for, not the day it arrived</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => shiftMonth(-1)} aria-label="Previous month">
@@ -401,7 +421,7 @@ export default function IncomePage() {
                 <Input id="inc-date" type="date" value={fDate} onChange={(e) => onDateChange(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="inc-for">Earned for (month)</Label>
+                <Label htmlFor="inc-for">For month</Label>
                 <Input
                   id="inc-for"
                   type="month"
@@ -413,9 +433,13 @@ export default function IncomePage() {
             </div>
             {fType === "salary" && fDate && fForMonth && fDate.slice(0, 7) !== fForMonth && (
               <p className="text-xs text-muted-foreground">
-                Earned for {monthName(`${fForMonth}-01`, "long")}, counted as {monthName(fDate, "long")} money to spend.
+                Paid {formatDate(fDate)}, counted as {monthName(`${fForMonth}-01`, "long")} salary.
               </p>
             )}
+            <div className="space-y-2">
+              <Label>{fReceived ? "Received in" : "Will arrive in"}</Label>
+              <AccountSelect value={fAccount} onChange={setFAccount} placeholder="Not linked to an account" />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="inc-note">Note (optional)</Label>
               <Input id="inc-note" name="note" defaultValue={editing?.note || ""} placeholder="e.g. includes F&F settlement" />
@@ -470,7 +494,7 @@ export default function IncomePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Income</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Earned</CardTitle>
                 <Wallet className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>

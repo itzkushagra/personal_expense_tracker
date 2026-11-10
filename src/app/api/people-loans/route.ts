@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { amount, date, note, person_name, relation, direction, purpose, expected_return_date } =
+  const { amount, date, note, person_name, relation, direction, purpose, expected_return_date, account_id } =
     await request.json();
   if (!person_name || !(Number(amount) > 0) || !DIRECTIONS.includes(direction)) {
     return NextResponse.json({ error: "Person, type and a positive amount are required" }, { status: 400 });
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
     amount: Number(amount),
     date: date || todayInAppZone(),
     note: note || "",
+    account_id: account_id || null,
   });
 
   if (entryError) {

@@ -30,6 +30,7 @@ import {
   CATEGORY_COLORS,
 } from "@/types";
 import { cn, formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
+import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { toast } from "sonner";
 import { ExpenseDialog } from "@/components/expense-dialog";
 
@@ -45,6 +46,9 @@ export default function ReimbursementsPage() {
   // Add/edit pop-up (same one the Expenses page uses).
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const { defaultId } = useAccounts();
+  const [payoutAccount, setPayoutAccount] = useState<string | null | undefined>(undefined);
+  const payoutAccountId = payoutAccount === undefined ? defaultId : payoutAccount;
 
   const fetchClaims = useCallback(async () => {
     setLoading(true);
@@ -103,6 +107,7 @@ export default function ReimbursementsPage() {
       setSelected(new Set());
       setAction(null);
       fetchClaims();
+      refreshAccounts();
       fetch("/api/net-worth", { method: "POST" });
     } catch {
       toast.error("Failed to update claims");
@@ -121,6 +126,7 @@ export default function ReimbursementsPage() {
       const amount = fd.get("reimbursed_amount") as string | null;
       applyStatus("reimbursed", {
         reimbursed_date: fd.get("reimbursed_date") || toLocalDateString(),
+        reimbursed_account_id: payoutAccountId,
         ...(amount ? { reimbursed_amount: parseFloat(amount) } : {}),
       });
     }
@@ -325,6 +331,10 @@ export default function ReimbursementsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="rb-date">Received on</Label>
                   <Input id="rb-date" name="reimbursed_date" type="date" defaultValue={toLocalDateString()} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Paid into</Label>
+                  <AccountSelect value={payoutAccountId} onChange={setPayoutAccount} placeholder="Not linked to an account" />
                 </div>
                 {selectedClaims.length === 1 && (
                   <div className="space-y-2">

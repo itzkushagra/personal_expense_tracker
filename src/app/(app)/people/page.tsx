@@ -45,6 +45,7 @@ import {
   loanEntryTypes,
 } from "@/types";
 import { cn, formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
+import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { toast } from "sonner";
 
 const DIRECTION_INFO: Record<
@@ -86,7 +87,12 @@ export default function PeopleLoansPage() {
   const [entryNote, setEntryNote] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showSettled, setShowSettled] = useState(false);
-  const [editEntry, setEditEntry] = useState<{ loanId: string; id: string; amount: string; date: string; note: string } | null>(null);
+  const [editEntry, setEditEntry] = useState<{ loanId: string; id: string; amount: string; date: string; note: string; account_id: string | null } | null>(null);
+  const { defaultId } = useAccounts();
+  const [newAccount, setNewAccount] = useState<string | null | undefined>(undefined);
+  const [entryAccount, setEntryAccount] = useState<string | null | undefined>(undefined);
+  const newAccountId = newAccount === undefined ? defaultId : newAccount;
+  const entryAccountId = entryAccount === undefined ? defaultId : entryAccount;
 
   const fetchLoans = useCallback(async () => {
     setLoading(true);
@@ -103,6 +109,14 @@ export default function PeopleLoansPage() {
 
   useEffect(() => { fetchLoans(); }, [fetchLoans]);
 
+  // Quick add (/people?new=1) opens the form straight away.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new")) {
+      window.history.replaceState(null, "", "/people");
+      setShowDialog(true);
+    }
+  }, []);
+
   const active = loans.filter((l) => l.balance > 0);
   const settled = loans.filter((l) => l.balance <= 0);
   const youOwe = active.filter((l) => DIRECTION_INFO[l.direction].youOwe);
@@ -114,6 +128,7 @@ export default function PeopleLoansPage() {
 
   function refreshAll() {
     fetchLoans();
+    refreshAccounts();
     fetch("/api/net-worth", { method: "POST" });
   }
 
@@ -141,6 +156,7 @@ export default function PeopleLoansPage() {
             body: JSON.stringify({
               ...base,
               direction: newDirection,
+              account_id: newAccountId,
               amount: parseFloat(fd.get("amount") as string),
               date: fd.get("date") || toLocalDateString(),
             }),
@@ -167,7 +183,7 @@ export default function PeopleLoansPage() {
       const res = await fetch(`/api/people-loans/${entryFor.id}/entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: entryFor.kind, amount, date: toLocalDateString(), note: entryNote }),
+        body: JSON.stringify({ kind: entryFor.kind, amount, date: toLocalDateString(), note: entryNote, account_id: entryAccountId }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
@@ -194,7 +210,7 @@ export default function PeopleLoansPage() {
       const res = await fetch(`/api/people-loans/${editEntry.loanId}/entries`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entry_id: editEntry.id, amount, date: editEntry.date, note: editEntry.note }),
+        body: JSON.stringify({ entry_id: editEntry.id, amount, date: editEntry.date, note: editEntry.note, account_id: editEntry.account_id }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
       toast.success("Entry updated");
@@ -303,6 +319,14 @@ export default function PeopleLoansPage() {
                 )}
               </div>
               <Input placeholder="Note (optional)" value={entryNote} onChange={(e) => setEntryNote(e.target.value)} className="h-8" />
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {(entryFor.kind === "repayment" ? loanEntryTypes(loan.direction).repayment : loanEntryTypes(loan.direction).principal) === "in"
+                    ? "Money came into"
+                    : "Money went out of"}
+                </p>
+                <AccountSelect value={entryAccountId} onChange={setEntryAccount} className="h-8 w-full" />
+              </div>
               <div className="flex gap-2">
                 <Button size="sm" className="h-8 flex-1" onClick={handleEntry}>Save</Button>
                 <Button size="sm" variant="ghost" className="h-8" onClick={() => { setEntryFor(null); setEntryAmount(""); setEntryNote(""); }}>Cancel</Button>
@@ -340,6 +364,7 @@ export default function PeopleLoansPage() {
                     <Input type="date" className="h-8" value={editEntry.date} onChange={(e) => setEditEntry({ ...editEntry, date: e.target.value })} aria-label="Date" />
                   </div>
                   <Input className="h-8" placeholder="Note" value={editEntry.note} onChange={(e) => setEditEntry({ ...editEntry, note: e.target.value })} />
+                  <AccountSelect value={editEntry.account_id} onChange={(id) => setEditEntry({ ...editEntry, account_id: id })} className="h-8 w-full" />
                   <div className="flex gap-2">
                     <Button size="sm" className="h-7 flex-1" onClick={handleUpdateEntry}>Save</Button>
                     <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditEntry(null)}>Cancel</Button>
@@ -361,7 +386,7 @@ export default function PeopleLoansPage() {
                   </span>
                   <button
                     className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setEditEntry({ loanId: loan.id, id: entry.id, amount: String(entry.amount), date: entry.date, note: entry.note })}
+                    onClick={() => setEditEntry({ loanId: loan.id, id: entry.id, amount: String(entry.amount), date: entry.date, note: entry.note, account_id: entry.account_id })}
                     aria-label="Edit entry"
                   >
                     <Pencil className="h-3 w-3" />
@@ -445,6 +470,12 @@ export default function PeopleLoansPage() {
                     <Label htmlFor="pl-date">Date</Label>
                     <Input id="pl-date" name="date" type="date" defaultValue={toLocalDateString()} />
                   </div>
+                </div>
+              )}
+              {!editing && (
+                <div className="space-y-2">
+                  <Label>{loanEntryTypes(newDirection).principal === "in" ? "Money came into" : "Money went out of"}</Label>
+                  <AccountSelect value={newAccountId} onChange={setNewAccount} placeholder="Not linked to an account" />
                 </div>
               )}
               <div className="space-y-2">

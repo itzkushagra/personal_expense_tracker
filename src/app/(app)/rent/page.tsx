@@ -34,6 +34,7 @@ import {
   CATEGORY_COLORS,
   outOfPocket,
 } from "@/types";
+import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -73,7 +74,10 @@ export default function RentPage() {
   const year = now.getFullYear();
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   const monthLabel = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+  const { defaultId } = useAccounts();
+  const [payAccount, setPayAccount] = useState<string | null | undefined>(undefined);
   const rentBill = bills.find((b) => b.is_active && (b.category === "Rent" || /\brent\b/i.test(b.name)));
+  const payAccountId = payAccount === undefined ? rentBill?.account_id ?? defaultId : payAccount;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -168,9 +172,11 @@ export default function RentPage() {
           date: toLocalDateString(),
           input_method: "manual",
           ai_categorized: false,
+          account_id: payAccountId,
         }),
       });
       if (!res.ok) throw new Error();
+      refreshAccounts();
 
       // Keep the Bills reminder in step: mark this month's rent bill paid (expense already added above).
       const monthEnd = toLocalDateString(new Date(year, month, 0));
@@ -469,6 +475,10 @@ export default function RentPage() {
             <CardTitle className="text-base">This Month</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="shrink-0 text-muted-foreground">Pay from</span>
+              <AccountSelect value={payAccountId} onChange={setPayAccount} placeholder="Not linked to an account" />
+            </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
                 <p className="text-sm font-medium">Rent: {formatCurrency(Number(rental.monthly_rent))}</p>

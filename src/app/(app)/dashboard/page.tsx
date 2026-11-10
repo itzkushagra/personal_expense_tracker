@@ -21,6 +21,8 @@ import {
   type Bill,
   type Rental,
   type PersonLoanWithBalance,
+  type Account,
+  type Income,
   CATEGORY_COLORS,
   HOUSING_CATEGORIES,
   outOfPocket,
@@ -37,14 +39,15 @@ import {
   ArrowRight,
   Bell,
   Shield,
-  TrendingUp,
-  TrendingDown,
   Home,
   HandCoins,
   Briefcase,
   Wallet,
+  Hourglass,
+  CalendarRange,
 } from "lucide-react";
-import { formatCurrency, formatDate, daysUntil, toLocalDateString } from "@/lib/utils";
+import { QUICK_ACTIONS } from "@/components/layout/quick-add";
+import { formatCurrency, daysUntil, toLocalDateString } from "@/lib/utils";
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -58,6 +61,8 @@ export default function DashboardPage() {
   const [rental, setRental] = useState<Rental | null>(null);
   const [loans, setLoans] = useState<PersonLoanWithBalance[]>([]);
   const [incomeTotal, setIncomeTotal] = useState(0);
+  const [accountList, setAccountList] = useState<Account[]>([]);
+  const [pendingIncome, setPendingIncome] = useState<Income[]>([]);
   const [claims, setClaims] = useState<Expense[]>([]);
 
   const now = new Date();
@@ -67,7 +72,7 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, netWorthRes, rentalRes, loansRes, claimsRes, incomesRes] = await Promise.all([
+      const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, netWorthRes, rentalRes, loansRes, claimsRes, incomesRes, accountsRes, pendingRes] = await Promise.all([
         fetch(`/api/expenses?month=${currentMonth}&year=${currentYear}&limit=1000`),
         fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`),
         fetch("/api/budgets"),
@@ -78,9 +83,11 @@ export default function DashboardPage() {
         fetch("/api/people-loans"),
         fetch("/api/reimbursements"),
         fetch(`/api/incomes?month=${currentMonth}&year=${currentYear}`),
+        fetch("/api/accounts"),
+        fetch("/api/incomes?pending=1"),
       ]);
 
-      const [expensesJson, summaryJson, budgetsJson, goalsJson, billsJson, netWorthJson, rentalJson, loansJson, claimsJson, incomesJson] = await Promise.all([
+      const [expensesJson, summaryJson, budgetsJson, goalsJson, billsJson, netWorthJson, rentalJson, loansJson, claimsJson, incomesJson, accountsJson, pendingJson] = await Promise.all([
         expensesRes.json(),
         summaryRes.json(),
         budgetsRes.json(),
@@ -91,6 +98,8 @@ export default function DashboardPage() {
         loansRes.json(),
         claimsRes.json(),
         incomesRes.json(),
+        accountsRes.json(),
+        pendingRes.json(),
       ]);
 
       setExpenses(expensesJson.data || []);
@@ -103,6 +112,8 @@ export default function DashboardPage() {
       setLoans(loansJson.data || []);
       setIncomeTotal((incomesJson.data || []).reduce((s: number, i: { amount: number }) => s + Number(i.amount), 0));
       setClaims(claimsJson.data || []);
+      setAccountList(accountsJson.data || []);
+      setPendingIncome(pendingJson.data || []);
 
       const trend: Record<string, number> = {};
       for (let i = 5; i >= 0; i--) {
@@ -111,7 +122,8 @@ export default function DashboardPage() {
         trend[key] = 0;
       }
 
-      const allExpRes = await fetch("/api/expenses?limit=5000");
+      const trendFrom = toLocalDateString(new Date(currentYear, currentMonth - 6, 1));
+      const allExpRes = await fetch(`/api/expenses?from=${trendFrom}&limit=10000`);
       const allExpJson = await allExpRes.json();
       for (const exp of allExpJson.data || []) {
         const d = new Date(exp.date);
@@ -177,6 +189,17 @@ export default function DashboardPage() {
     (l) => l.direction !== "lent" && l.expected_return_date && daysUntil(l.expected_return_date) < 0
   );
   const leftOver = incomeTotal - totalSpent;
+
+  // Money snapshot: cash on hand, how long it lasts, and the next 30 days.
+  const liquid = accountList
+    .filter((a) => ["checking", "savings", "cash", "wallet"].includes(a.type))
+    .reduce((s, a) => s + Number(a.balance), 0);
+  const recentMonths = trendData.slice(-4, -1).filter((m) => m.total > 0); // last 3 full months
+  const avgMonthly = recentMonths.length ? recentMonths.reduce((s, m) => s + m.total, 0) / recentMonths.length : 0;
+  const runway = avgMonthly > 0 ? liquid / avgMonthly : null;
+  const in30 = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30));
+  const incomingSoon = pendingIncome.filter((i) => i.date <= in30).reduce((s, i) => s + Number(i.amount), 0);
+  const billsSoon = bills.filter((b) => b.is_active && b.next_due_date <= in30).reduce((s, b) => s + Number(b.amount), 0);
   const claimsDue = claims.reduce((s, c) => s + reimbursementDue(c), 0);
   const claimsToSubmit = claims.filter((c) => c.reimbursement_status === "pending");
 
@@ -202,11 +225,75 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">
-          {now.toLocaleString("en-IN", { month: "long", year: "numeric" })} overview
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            {now.toLocaleString("en-IN", { month: "long", year: "numeric" })} overview
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {QUICK_ACTIONS.slice(0, 4).map((a) => (
+            <Link key={a.href} href={a.href}>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <a.icon className="h-4 w-4" /> {a.label}
+              </Button>
+            </Link>
+          ))}
+          <Link href="/yearly">
+            <Button variant="ghost" size="sm" className="gap-1.5">
+              <CalendarRange className="h-4 w-4" /> Yearly view
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Money snapshot */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Link href="/accounts">
+          <Card className="h-full cursor-pointer bg-gradient-to-br from-primary/10 to-transparent transition-colors hover:bg-muted/50">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Cash & Bank</CardTitle>
+              <Landmark className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{accountList.length ? formatCurrency(liquid) : "—"}</div>
+              <p className="text-xs text-muted-foreground">
+                {accountList.length ? `across ${accountList.filter((a) => ["checking", "savings", "cash", "wallet"].includes(a.type)).length} accounts` : "Add your accounts to see this"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Card className="h-full">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Runway</CardTitle>
+            <Hourglass className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${runway !== null && runway < 3 ? "text-destructive" : runway !== null && runway < 6 ? "text-yellow-600" : "text-green-600"}`}>
+              {runway === null || !accountList.length ? "—" : `${runway.toFixed(1)} months`}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {avgMonthly > 0 ? `at ${formatCurrency(avgMonthly)}/month recent spending · aim for 6` : "needs a few months of spending data"}
+            </p>
+          </CardContent>
+        </Card>
+        <Link href="/bills">
+          <Card className="h-full cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Next 30 Days</CardTitle>
+              <CalendarClock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${incomingSoon - billsSoon >= 0 ? "text-green-600" : "text-destructive"}`}>
+                {incomingSoon - billsSoon >= 0 ? "+" : "−"}{formatCurrency(Math.abs(incomingSoon - billsSoon))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(incomingSoon)} expected in · {formatCurrency(billsSoon)} bills due
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <SummaryCards

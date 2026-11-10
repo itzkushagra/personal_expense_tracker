@@ -44,7 +44,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { amount, description, category, date, is_reimbursable, claim_reference } = body;
+  const { amount, description, category, date, is_reimbursable, claim_reference, account_id } = body;
 
   const update: Record<string, unknown> = {
     amount,
@@ -54,6 +54,7 @@ export async function PUT(
     ai_categorized: false,
     updated_at: new Date().toISOString(),
   };
+  if (account_id !== undefined) update.account_id = account_id || null;
 
   if (is_reimbursable !== undefined) {
     const { data: current } = await supabase

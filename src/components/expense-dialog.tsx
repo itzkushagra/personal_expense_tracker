@@ -55,6 +55,7 @@ export function ExpenseDialog({
               onOpenChange(false);
               onSaved?.();
             }}
+            onChanged={() => onSaved?.()}
             onCancel={() => onOpenChange(false)}
           />
         )}

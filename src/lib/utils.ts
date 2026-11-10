@@ -19,6 +19,12 @@ export function toLocalDateString(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Last day of a month as YYYY-MM-DD (month is 1-12), without any timezone conversion. */
+export function monthEndString(year: number, month: number): string {
+  const last = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+}
+
 /** Whole days from today until the given YYYY-MM-DD date (negative if past). */
 export function daysUntil(date: string): number {
   const [y, m, d] = date.split("-").map(Number);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { monthRange, todayInAppZone } from "@/lib/dates";
+import { todayInAppZone } from "@/lib/dates";
 
 /** First day of the month containing a YYYY-MM-DD date. */
 function monthStart(date: string) {
@@ -16,23 +16,23 @@ export async function GET(request: NextRequest) {
   const month = searchParams.get("month");
   const year = searchParams.get("year");
   const from = searchParams.get("from");
+  const to = searchParams.get("to");
   const pending = searchParams.get("pending");
 
   let query = supabase
     .from("incomes")
     .select("*")
     .eq("user_id", user.id)
+    .order("for_month", { ascending: false })
     .order("date", { ascending: false });
 
-  // Month filters use the day the money arrives (or is expected), because
-  // that is the month it is there to spend: October's salary paid on
-  // 3 November is November's money. for_month only records which month the
-  // work was for.
+  // Month filters apply to the month the income was earned for (for_month), not the
+  // day it arrived: salary paid on 10 September is August's salary.
   if (month && year) {
-    const { start, end } = monthRange(Number(year), Number(month));
-    query = query.gte("date", start).lte("date", end);
-  } else if (from) {
-    query = query.gte("date", monthStart(from));
+    query = query.eq("for_month", `${year}-${month.padStart(2, "0")}-01`);
+  } else {
+    if (from) query = query.gte("for_month", monthStart(from));
+    if (to) query = query.lte("for_month", monthStart(to));
   }
   if (pending) query = query.eq("is_received", false);
 
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { amount, source, type, date, for_month, is_received, note } = await request.json();
+  const { amount, source, type, date, for_month, is_received, note, account_id } = await request.json();
   if (!(Number(amount) > 0) || !source) {
     return NextResponse.json({ error: "Amount and source are required" }, { status: 400 });
   }
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
       date: day,
       for_month: monthStart(for_month || day),
       is_received: is_received ?? true,
+      account_id: account_id || null,
       note: note || "",
     })
     .select()

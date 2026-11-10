@@ -23,8 +23,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Mic, MicOff, Loader2, Sparkles, Briefcase, PiggyBank } from "lucide-react";
+import { Mic, MicOff, Loader2, Sparkles, Briefcase, PiggyBank, Users, Plus, X } from "lucide-react";
 import { useSpeech } from "@/hooks/use-speech";
+import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import {
   SAVINGS_CATEGORIES,
   SPENDING_CATEGORIES,
@@ -41,6 +42,8 @@ interface ExpenseFormProps {
   inDialog?: boolean;
   /** Called after a successful save instead of navigating to /expenses. */
   onSaved?: () => void;
+  /** Called after each save when "add another" keeps the form open (e.g. to refresh a list). */
+  onChanged?: () => void;
   /** Called on Cancel instead of going back a page. */
   onCancel?: () => void;
   /** Pre-tick "Company will reimburse this" when adding. */
@@ -52,6 +55,7 @@ export function ExpenseForm({
   mode = "create",
   inDialog = false,
   onSaved,
+  onChanged,
   onCancel,
   defaultReimbursable = false,
 }: ExpenseFormProps) {
@@ -74,6 +78,26 @@ export function ExpenseForm({
   const [isReimbursable, setIsReimbursable] = useState(expense ? !!expense.is_reimbursable : defaultReimbursable);
   const [claimReference, setClaimReference] = useState(expense?.claim_reference || "");
   const isSavings = isSavingsCategory(category);
+  const { loaded: accountsLoaded, defaultId } = useAccounts();
+  // undefined = not chosen yet; new expenses start on the default account once accounts load.
+  const [accountId, setAccountId] = useState<string | null | undefined>(
+    mode === "edit" ? expense?.account_id ?? null : undefined
+  );
+  const selectedAccount = accountId === undefined ? defaultId : accountId;
+
+  // Split a bill: you paid the total, friends owe their shares (recorded as "Lent to them").
+  const [splitOn, setSplitOn] = useState(false);
+  const [splits, setSplits] = useState<{ name: string; amount: string }[]>([{ name: "", amount: "" }]);
+  const [addAnother, setAddAnother] = useState(false);
+  const total = parseFloat(amount) || 0;
+  const friendsTotal = splitOn ? splits.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) : 0;
+  const myShare = Math.round((total - friendsTotal) * 100) / 100;
+
+  function splitEqually() {
+    const people = splits.length + 1;
+    const share = Math.floor((total / people) * 100) / 100;
+    setSplits(splits.map((r) => ({ ...r, amount: share ? String(share) : "" })));
+  }
 
   useEffect(() => {
     if (transcript && !isListening) {
@@ -130,6 +154,11 @@ export function ExpenseForm({
       toast.error("Amount and description are required");
       return;
     }
+    const friendRows = splitOn ? splits.filter((r) => r.name.trim() && parseFloat(r.amount) > 0) : [];
+    if (splitOn && (friendRows.length === 0 || myShare < 0)) {
+      toast.error(myShare < 0 ? "Friends' shares add up to more than the total" : "Add at least one friend and their share");
+      return;
+    }
     setLoading(true);
 
     const url =
@@ -137,12 +166,14 @@ export function ExpenseForm({
     const method = mode === "edit" ? "PUT" : "POST";
 
     try {
-      const res = await fetch(url, {
+      // If friends' shares cover the whole bill there's no expense of your own to record.
+      const skipOwn = splitOn && myShare <= 0;
+      const res = skipOwn ? new Response("{}") : await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: parseFloat(amount),
-          description,
+          amount: splitOn ? myShare : parseFloat(amount),
+          description: splitOn ? `${description} (split)` : description,
           category: category || "Miscellaneous",
           date,
           input_method: inputMethod,
@@ -150,6 +181,7 @@ export function ExpenseForm({
           // Savings are your own money set aside, never a company claim.
           is_reimbursable: isSavings ? false : isReimbursable,
           claim_reference: isSavings ? "" : claimReference,
+          account_id: accountsLoaded ? selectedAccount : expense?.account_id ?? null,
         }),
       });
 
@@ -158,16 +190,50 @@ export function ExpenseForm({
         throw new Error(json.error || `Server returned ${res.status}`);
       }
 
+      // Each friend's share is money you lent from the same account.
+      for (const r of friendRows) {
+        await fetch("/api/people-loans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            person_name: r.name.trim(),
+            relation: "friend",
+            direction: "lent",
+            amount: parseFloat(r.amount),
+            date,
+            purpose: `Share of ${description}`,
+            account_id: accountsLoaded ? selectedAccount : null,
+          }),
+        });
+      }
+
       // The list opens on this month, so say where an entry from another month went.
       const savedMonth = date.slice(0, 7);
       const otherMonth = savedMonth !== toLocalDateString().slice(0, 7);
       const monthName = new Date(`${date}T00:00:00`).toLocaleString("en-IN", { month: "long", year: "numeric" });
       toast.success(
-        isSavings
-          ? mode === "edit" ? "Savings entry updated" : "Savings entry added"
-          : mode === "edit" ? "Expense updated" : "Expense added",
+        mode === "edit"
+          ? isSavings ? "Savings entry updated" : "Expense updated"
+          : friendRows.length
+            ? `Added your share ${myShare.toLocaleString("en-IN")} and ${friendRows.length} friend${friendRows.length > 1 ? "s" : ""} owe you`
+            : isSavings ? "Savings entry added" : "Expense added",
         otherMonth ? { description: `Saved under ${monthName}. Pick that month in the filter to see it.` } : undefined
       );
+      refreshAccounts();
+      if (addAnother && mode === "create") {
+        // Keep date and account; clear the rest for the next entry.
+        setAmount("");
+        setDescription("");
+        setCategory("");
+        setIsReimbursable(false);
+        setClaimReference("");
+        setSplitOn(false);
+        setSplits([{ name: "", amount: "" }]);
+        setInputMethod("manual");
+        document.getElementById("amount")?.focus();
+        onChanged?.();
+        return;
+      }
       if (onSaved) {
         onSaved();
       } else {
@@ -235,7 +301,7 @@ export function ExpenseForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount (₹)</Label>
+              <Label htmlFor="amount">{splitOn ? "Total paid (₹)" : "Amount (₹)"}</Label>
               <Input
                 id="amount"
                 type="number"
@@ -329,6 +395,11 @@ export function ExpenseForm({
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label>Paid from</Label>
+            <AccountSelect value={selectedAccount} onChange={setAccountId} placeholder="Not linked to an account" />
+          </div>
+
           {!isSavings && (
           <div className="space-y-3 rounded-lg border p-3">
             <label className="flex cursor-pointer items-start gap-3">
@@ -360,6 +431,77 @@ export function ExpenseForm({
               </div>
             )}
           </div>
+          )}
+
+          {mode === "create" && !isSavings && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                  checked={splitOn}
+                  onChange={(e) => setSplitOn(e.target.checked)}
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <Users className="h-3.5 w-3.5" />
+                    Split this bill with friends
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Only your share counts as spending; each friend&apos;s share is added to People &amp; Loans as money they owe you
+                  </span>
+                </span>
+              </label>
+              {splitOn && (
+                <div className="space-y-2">
+                  {splits.map((r, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Input
+                        placeholder="Friend's name"
+                        value={r.name}
+                        onChange={(e) => setSplits(splits.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Their share"
+                        className="w-36"
+                        value={r.amount}
+                        onChange={(e) => setSplits(splits.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSplits(splits.length > 1 ? splits.filter((_, j) => j !== i) : [{ name: "", amount: "" }])}
+                        aria-label="Remove friend"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setSplits([...splits, { name: "", amount: "" }])}>
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Add friend
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={splitEqually} disabled={!total}>
+                      Split equally ({splits.length + 1} people)
+                    </Button>
+                    <span className={`ml-auto text-sm ${myShare < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                      Your share: <span className="font-semibold">₹{myShare.toLocaleString("en-IN")}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode === "create" && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" className="h-4 w-4 accent-primary" checked={addAnother} onChange={(e) => setAddAnother(e.target.checked)} />
+              Keep this form open to add another
+            </label>
           )}
 
           <div className="flex gap-3 pt-2">

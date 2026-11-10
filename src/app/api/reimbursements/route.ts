@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { ids, status, claim_reference, reimbursed_date, reimbursed_amount } = await request.json();
+  const { ids, status, claim_reference, reimbursed_date, reimbursed_amount, reimbursed_account_id } = await request.json();
   if (!Array.isArray(ids) || ids.length === 0 || !STATUSES.includes(status)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
@@ -56,6 +56,7 @@ export async function PATCH(request: NextRequest) {
       if (claim_reference !== undefined) update.claim_reference = claim_reference;
       if (status === "reimbursed") {
         update.reimbursed_date = reimbursed_date || today;
+        update.reimbursed_account_id = reimbursed_account_id || null;
         update.reimbursed_amount =
           ids.length === 1 && reimbursed_amount !== undefined && reimbursed_amount !== null
             ? Number(reimbursed_amount)
@@ -63,6 +64,7 @@ export async function PATCH(request: NextRequest) {
       } else {
         update.reimbursed_date = null;
         update.reimbursed_amount = 0;
+        update.reimbursed_account_id = null;
       }
       return supabase.from("expenses").update(update).eq("id", exp.id).eq("user_id", user.id);
     })

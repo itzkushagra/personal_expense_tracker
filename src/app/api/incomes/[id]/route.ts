@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const FIELDS = ["amount", "source", "type", "date", "for_month", "is_received", "note"] as const;
+const FIELDS = ["amount", "source", "type", "date", "for_month", "is_received", "note", "account_id"] as const;
 
 // Partial update: only the fields sent are changed (e.g. { is_received: true, date } to mark received).
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +15,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   for (const key of FIELDS) {
     if (body[key] !== undefined) update[key] = body[key];
   }
+  if (update.account_id === "") update.account_id = null;
   if (typeof update.for_month === "string") update.for_month = `${update.for_month.slice(0, 7)}-01`;
 
   const { data, error } = await supabase

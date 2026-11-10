@@ -7,16 +7,21 @@
  * fields below are now accepted; anything else in the body is ignored.
  */
 export const WRITABLE = {
-  accounts: ["name", "type", "balance", "institution", "color", "is_active"],
+  accounts: [
+    "name", "type", "balance", "institution", "color", "is_active",
+    "opening_balance", "opening_date", "is_default",
+  ],
   debts: [
     "name", "type", "original_amount", "current_balance", "interest_rate",
     "minimum_payment", "due_day", "start_date", "expected_payoff_date", "is_active",
+    "account_id",
   ],
   budgets: ["category", "amount", "period", "start_date", "end_date", "alert_threshold", "is_active"],
   goals: ["name", "target_amount", "current_amount", "priority", "deadline", "icon", "color", "is_completed"],
   bills: [
     "name", "amount", "category", "frequency", "due_day", "next_due_date",
     "is_auto_pay", "is_active", "reminder_days_before",
+    "account_id", "kind", "to_account_id", "debt_id",
   ],
   bill_payments: ["amount_paid", "paid_date", "status"],
   rentals: [

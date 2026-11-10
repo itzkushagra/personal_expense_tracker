@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -28,8 +26,6 @@ import {
 } from "recharts";
 import {
   Loader2,
-  TrendingUp,
-  TrendingDown,
   AlertTriangle,
   ArrowUpRight,
   ArrowDownRight,
@@ -78,10 +74,9 @@ export default function ReportsPage() {
     monthlyMap[key].total += outOfPocket(exp);
     monthlyMap[key].count++;
   }
-  // Income counts in the month it arrives: that's the month it is there to spend
-  // (October's salary paid on 3 November is November's income).
+  // Income is grouped by the month it was earned for (salary paid on the 10th counts for the month before).
   for (const inc of incomes) {
-    const key = inc.date.slice(0, 7);
+    const key = inc.for_month.slice(0, 7);
     if (`${key}-01` < toLocalDateString(cutoffDate)) continue;
     if (!monthlyMap[key]) monthlyMap[key] = { total: 0, income: 0, count: 0 };
     monthlyMap[key].income += Number(inc.amount);

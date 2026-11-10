@@ -92,7 +92,7 @@ export function FiftyThirtyTwenty({ income, expenses, title = "50/30/20 Check" }
             ))}
             <p className="text-xs text-muted-foreground">
               {saved < 0
-                ? `You spent ${formatCurrency(-saved)} more than your income this month.`
+                ? `You spent ${formatCurrency(-saved)} more than you earned this month.`
                 : `You've kept ${((saved / income) * 100).toFixed(0)}% of your income so far. The target is 20% or more.`}
             </p>
           </>

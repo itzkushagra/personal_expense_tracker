@@ -16,6 +16,10 @@ export async function GET(request: NextRequest) {
   const month = searchParams.get("month");
   const year = searchParams.get("year");
   const category = searchParams.get("category");
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+  const q = searchParams.get("q");
+  const accountId = searchParams.get("account_id");
   const limit = parseInt(searchParams.get("limit") || "50");
   const offset = parseInt(searchParams.get("offset") || "0");
 
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest) {
     .select("*", { count: "exact" })
     .eq("user_id", user.id)
     .order("date", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order("created_at", { ascending: false });
 
   if (month && year) {
     const { start, end } = monthRange(parseInt(year), parseInt(month));
@@ -35,13 +39,28 @@ export async function GET(request: NextRequest) {
     query = query.eq("category", category);
   }
 
-  const { data, error, count } = await query;
+  if (from) query = query.gte("date", from);
+  if (to) query = query.lte("date", to);
+  if (q) query = query.ilike("description", `%${q.replace(/[%_,()]/g, " ").trim()}%`);
+  // account_id=none lists expenses not linked to any account
+  if (accountId === "none") query = query.is("account_id", null);
+  else if (accountId) query = query.eq("account_id", accountId);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  // The database returns at most 1000 rows per request, so larger limits are fetched in pages.
+  const rows: unknown[] = [];
+  let count: number | null = null;
+  for (let start = offset; start < offset + limit; start += 1000) {
+    const end = Math.min(start + 1000, offset + limit) - 1;
+    const { data, error, count: total } = await query.range(start, end);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    count = total;
+    rows.push(...(data || []));
+    if (!data || data.length < end - start + 1) break;
   }
 
-  return NextResponse.json({ data, count });
+  return NextResponse.json({ data: rows, count });
 }
 
 export async function POST(request: NextRequest) {
@@ -67,6 +86,7 @@ export async function POST(request: NextRequest) {
     ai_categorized,
     is_reimbursable,
     claim_reference,
+    account_id,
   } = body;
 
   const { data, error } = await supabase
@@ -82,6 +102,7 @@ export async function POST(request: NextRequest) {
       is_reimbursable: !!is_reimbursable,
       reimbursement_status: is_reimbursable ? "pending" : null,
       claim_reference: is_reimbursable ? claim_reference || "" : "",
+      account_id: account_id || null,
     })
     .select()
     .single();
