@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { pick, WRITABLE } from "@/lib/api-fields";
+import { validateBillSetup } from "@/lib/bill-payments";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -9,6 +10,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+  // A card or EMI bill must say what it pays off, or marking it paid can't be accounted for.
+  if (body.kind !== undefined) {
+    const setupError = validateBillSetup(body);
+    if (setupError) return NextResponse.json({ error: setupError }, { status: 400 });
+  }
   const { data, error } = await supabase
     .from("bills")
     .update({ ...pick(body, WRITABLE.bills), updated_at: new Date().toISOString() })
