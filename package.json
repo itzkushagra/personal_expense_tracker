@@ -14,7 +14,8 @@
     "db:migrations": "supabase migration list",
     "db:new": "supabase migration new",
     "db:push:dry": "supabase db push --dry-run",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "test:e2e:login": "playwright test -c playwright.login.config.ts --headed"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

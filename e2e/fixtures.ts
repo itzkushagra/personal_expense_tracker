@@ -11,8 +11,10 @@ export interface PageProblems {
 // Noise that is not an app bug (dev-mode HMR, React DevTools hint, browser favicon probes).
 const IGNORED = [/Download the React DevTools/i, /\[HMR\]/, /\[Fast Refresh\]/, /favicon\.ico/];
 
-export const test = base.extend<{ theme: Theme; problems: PageProblems }>({
+export const test = base.extend<{ theme: Theme; allowedConsole: RegExp[]; problems: PageProblems }>({
   theme: ["dark", { option: true }],
+  // Console errors a test expects (e.g. the 400 from a deliberately wrong password).
+  allowedConsole: [[], { option: true }],
 
   // next-themes reads the "theme" key from localStorage before the first paint.
   page: async ({ page, theme }, provide) => {
@@ -26,11 +28,12 @@ export const test = base.extend<{ theme: Theme; problems: PageProblems }>({
 
   // Every test fails if the page logged an error or a request failed / returned 5xx.
   problems: [
-    async ({ page }, provide, testInfo) => {
+    async ({ page, allowedConsole }, provide, testInfo) => {
       const problems: PageProblems = { console: [], network: [] };
       page.on("console", (msg) => {
-        if (msg.type() === "error" && !IGNORED.some((r) => r.test(msg.text()))) {
-          problems.console.push(msg.text());
+        const text = msg.text();
+        if (msg.type() === "error" && ![...IGNORED, ...allowedConsole].some((r) => r.test(text))) {
+          problems.console.push(text);
         }
       });
       page.on("pageerror", (err) => problems.console.push(`pageerror: ${err.message}`));
