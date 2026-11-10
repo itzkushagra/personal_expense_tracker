@@ -32,7 +32,7 @@ import {
   BarChart3,
   DollarSign,
 } from "lucide-react";
-import { type Expense, type Income, CATEGORY_COLORS, outOfPocket } from "@/types";
+import { type Expense, type Income, CATEGORY_COLORS, isRefund, netOfRefunds, outOfPocket } from "@/types";
 import { formatCurrency, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
@@ -79,7 +79,12 @@ export default function ReportsPage() {
     const key = inc.for_month.slice(0, 7);
     if (`${key}-01` < toLocalDateString(cutoffDate)) continue;
     if (!monthlyMap[key]) monthlyMap[key] = { total: 0, income: 0, count: 0 };
-    monthlyMap[key].income += Number(inc.amount);
+    // Refunds / cashback reduce that month's spending instead of counting as income.
+    if (isRefund(inc)) {
+      if (inc.is_received) monthlyMap[key].total = netOfRefunds(monthlyMap[key].total, Number(inc.amount));
+    } else {
+      monthlyMap[key].income += Number(inc.amount);
+    }
   }
   const monthlyTrends = Object.entries(monthlyMap)
     .sort(([a], [b]) => a.localeCompare(b))

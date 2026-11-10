@@ -7,6 +7,7 @@ import {
   LOAN_DIRECTION_LABELS,
   type LoanDirection,
 } from "@/types";
+import { cashDelta, isMissingTable } from "@/lib/portfolio";
 
 /** A movement of money through one account. delta: + money in, − money out. */
 export interface Flow {
@@ -20,12 +21,17 @@ export interface Flow {
 }
 
 /** PostgREST caps responses at 1000 rows, so page through everything. */
-async function fetchAll<T>(
-  build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+type QueryError = { message: string; code?: string } | null;
+
+export async function fetchAll<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: unknown; error: QueryError }>,
+  { optional = false }: { optional?: boolean } = {}
 ): Promise<T[]> {
   const rows: T[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await build(from, from + 999);
+    // optional: a table added by a migration that hasn't been applied yet counts as empty.
+    if (error && optional && isMissingTable(error)) return [];
     if (error) throw new Error(error.message);
     const page = (data as T[] | null) || [];
     rows.push(...page);
@@ -46,6 +52,18 @@ type LoanEntryRow = {
   loan: { person_name: string; direction: LoanDirection } | { person_name: string; direction: LoanDirection }[] | null;
 };
 type TransferRow = { id: string; date: string; amount: number; note: string; from_account_id: string; to_account_id: string };
+type AdjustmentRow = { id: string; date: string; amount: number; note: string; account_id: string };
+type InvestmentTxnRow = {
+  id: string;
+  date: string;
+  type: "buy" | "sell" | "opening";
+  quantity: number;
+  price: number;
+  fees: number;
+  note: string;
+  account_id: string;
+  holding: { name: string } | { name: string }[] | null;
+};
 export type DebtPaymentRow = {
   id: string;
   paid_date: string;
@@ -77,6 +95,27 @@ export function debtPaymentFlows(rows: DebtPaymentRow[]): Flow[] {
     });
 }
 
+/**
+ * Cash moved by investment buys and sales. A buy is money leaving the account into a holding
+ * (not spending); a sale is money coming back. Opening positions move no cash.
+ */
+export function investmentFlows(rows: InvestmentTxnRow[]): Flow[] {
+  return rows
+    .filter((t) => t.account_id && t.type !== "opening")
+    .map((t) => {
+      const holding = Array.isArray(t.holding) ? t.holding[0] : t.holding;
+      return {
+        account_id: t.account_id,
+        kind: t.type === "sell" ? ("investment_sell" as const) : ("investment_buy" as const),
+        id: t.id,
+        date: t.date,
+        description: `${t.type === "sell" ? "Sold" : "Bought"} ${holding?.name ?? "investment"}`,
+        detail: t.note ? `Investment · ${t.note}` : "Investment",
+        delta: cashDelta(t),
+      };
+    });
+}
+
 /** All linked money movements for the user, optionally for a single account. */
 async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: string): Promise<Flow[]> {
   const linked = (table: string, columns: string, accountColumn: string) => {
@@ -84,7 +123,7 @@ async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: s
     return accountId ? q.eq(accountColumn, accountId) : q.not(accountColumn, "is", null);
   };
 
-  const [expenses, payouts, incomes, loanEntries, transfers, debtPayments] = await Promise.all([
+  const [expenses, payouts, incomes, loanEntries, transfers, debtPayments, adjustments, investmentTxns] = await Promise.all([
     fetchAll<ExpenseRow>((f, t) => linked("expenses", "id, date, amount, description, category, account_id", "account_id").range(f, t)),
     fetchAll<PayoutRow>((f, t) =>
       linked("expenses", "id, reimbursed_date, reimbursed_amount, description, reimbursed_account_id", "reimbursed_account_id")
@@ -107,6 +146,16 @@ async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: s
         .not("debt_id", "is", null)
         .is("reversed_at", null)
         .range(f, t)
+    ),
+    fetchAll<AdjustmentRow>((f, t) => linked("account_adjustments", "id, date, amount, note, account_id", "account_id").range(f, t), {
+      optional: true,
+    }),
+    fetchAll<InvestmentTxnRow>(
+      (f, t) =>
+        linked("investment_transactions", "id, date, type, quantity, price, fees, note, account_id, holding:investment_holdings(name)", "account_id")
+          .in("type", ["buy", "sell"])
+          .range(f, t),
+      { optional: true }
     ),
   ]);
 
@@ -153,6 +202,18 @@ async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: s
     }
   }
   flows.push(...debtPaymentFlows(debtPayments));
+  for (const a of adjustments) {
+    flows.push({
+      account_id: a.account_id,
+      kind: "adjustment",
+      id: a.id,
+      date: a.date,
+      description: "Balance adjustment",
+      detail: a.note || "Matched to bank balance",
+      delta: Number(a.amount),
+    });
+  }
+  flows.push(...investmentFlows(investmentTxns));
   return flows;
 }
 

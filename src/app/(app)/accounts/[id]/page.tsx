@@ -19,6 +19,8 @@ import {
   HandCoins,
   Briefcase,
   CalendarClock,
+  Scale,
+  TrendingUp,
 } from "lucide-react";
 import {
   type Account,
@@ -48,6 +50,9 @@ const KIND_META: Record<LedgerKind, { label: string; icon: React.ElementType; hr
   transfer_in: { label: "Transfer", icon: ArrowLeftRight, href: () => "/accounts" },
   transfer_out: { label: "Transfer", icon: ArrowLeftRight, href: () => "/accounts" },
   debt_payment: { label: "Debt repayment", icon: CalendarClock, href: () => "/bills" },
+  adjustment: { label: "Balance adjustment", icon: Scale, href: () => "/accounts" },
+  investment_buy: { label: "Investment", icon: TrendingUp, href: () => "/investments" },
+  investment_sell: { label: "Investment", icon: TrendingUp, href: () => "/investments" },
 };
 
 export default function AccountStatementPage() {

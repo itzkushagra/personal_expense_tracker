@@ -473,7 +473,7 @@ export default function AccountsPage() {
                   <div className="space-y-2 rounded-lg border border-dashed p-3">
                     <Label htmlFor="acc-actual">Match my bank balance (optional)</Label>
                     <Input id="acc-actual" name="actual_balance" type="number" step="0.01" placeholder={`Currently ${formatCurrency(Number(editingAccount.balance))}`} />
-                    <p className="text-xs text-muted-foreground">Enter what your bank app shows right now and the starting balance is adjusted so they match.</p>
+                    <p className="text-xs text-muted-foreground">Enter what your bank app shows right now. The difference is recorded as a dated &quot;Balance adjustment&quot; on the statement; past entries stay as they were.</p>
                   </div>
                 )}
                 <label className="flex cursor-pointer items-center gap-2 text-sm">

@@ -42,6 +42,9 @@ import {
   INCOME_TYPE_COLORS,
   SAVINGS_CATEGORIES,
   outOfPocket,
+  earnedIncome,
+  netOfRefunds,
+  refundsReceived,
 } from "@/types";
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
 import {
@@ -209,16 +212,18 @@ export default function IncomePage() {
 
   const received = incomes.filter((i) => i.is_received);
   const expected = incomes.filter((i) => !i.is_received);
-  const totalReceived = received.reduce((s, i) => s + Number(i.amount), 0);
-  const totalExpected = expected.reduce((s, i) => s + Number(i.amount), 0);
+  // Refunds / cashback are money back on spending, not earnings.
+  const totalReceived = earnedIncome(received);
+  const totalExpected = earnedIncome(expected);
   const totalEarned = totalReceived + totalExpected;
-  const totalSpent = expenses.reduce((s, e) => s + outOfPocket(e), 0);
+  const refunds = refundsReceived(incomes);
+  const totalSpent = netOfRefunds(expenses.reduce((s, e) => s + outOfPocket(e), 0), refunds);
   const invested = expenses
     .filter((e) => SAVINGS_CATEGORIES.includes(e.category))
     .reduce((s, e) => s + Number(e.amount), 0);
   const leftOver = totalEarned - totalSpent;
   const savingsRate = totalEarned > 0 ? (leftOver / totalEarned) * 100 : 0;
-  const prevTotal = prevIncomes.reduce((s, i) => s + Number(i.amount), 0);
+  const prevTotal = earnedIncome(prevIncomes);
   const allPending = pending.reduce((s, i) => s + Number(i.amount), 0);
 
   const byType: Partial<Record<IncomeType, number>> = {};
@@ -533,7 +538,11 @@ export default function IncomePage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(totalSpent)}</div>
-                <p className="text-xs text-muted-foreground">out of pocket, excl. savings &amp; investments</p>
+                <p className="text-xs text-muted-foreground">
+                  {refunds > 0
+                    ? `after ${formatCurrency(refunds)} refunds / cashback, excl. savings & investments`
+                    : "out of pocket, excl. savings & investments"}
+                </p>
               </CardContent>
             </Card>
             <Card>

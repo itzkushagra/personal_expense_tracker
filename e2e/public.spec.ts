@@ -34,6 +34,7 @@ test.describe("signed out", () => {
     "/reports",
     "/yearly",
     "/settings",
+    "/investments",
   ];
   for (const path of protectedPages) {
     test(`${path} sends a signed-out visitor to /login`, async ({ page }) => {

@@ -16,6 +16,9 @@ const TABLES = [
   "rentals",
   "net_worth_snapshots",
   "monthly_summaries",
+  "account_adjustments",
+  "investment_holdings",
+  "investment_transactions",
 ] as const;
 
 /** Full backup of the signed-in user's data as a downloadable JSON file. */

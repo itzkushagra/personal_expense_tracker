@@ -19,6 +19,7 @@ const modules: { path: string; heading: RegExp }[] = [
   { path: "/reports", heading: /reports/i },
   { path: "/yearly", heading: /year/i },
   { path: "/settings", heading: /settings/i },
+  { path: "/investments", heading: /investments/i },
 ];
 
 for (const { path, heading } of modules) {

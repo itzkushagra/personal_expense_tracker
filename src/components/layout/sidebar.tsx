@@ -25,6 +25,7 @@ import {
   CalendarRange,
   Settings,
   PlusCircle,
+  TrendingUp,
 } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -44,6 +45,7 @@ const navGroups = [
       { href: "/expenses", label: "Expenses", icon: Receipt },
       { href: "/income", label: "Income", icon: Banknote },
       { href: "/accounts", label: "Accounts", icon: Landmark },
+      { href: "/investments", label: "Investments", icon: TrendingUp },
       { href: "/people", label: "People & Loans", icon: HandCoins },
       { href: "/reimbursements", label: "Reimbursements", icon: Briefcase },
     ],

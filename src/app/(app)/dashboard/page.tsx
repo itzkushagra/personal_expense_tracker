@@ -27,6 +27,9 @@ import {
   HOUSING_CATEGORIES,
   outOfPocket,
   reimbursementDue,
+  earnedIncome,
+  netOfRefunds,
+  refundsReceived,
 } from "@/types";
 import type { NetWorthBreakdown } from "@/lib/net-worth";
 import {
@@ -62,6 +65,7 @@ export default function DashboardPage() {
   const [rental, setRental] = useState<Rental | null>(null);
   const [loans, setLoans] = useState<PersonLoanWithBalance[]>([]);
   const [incomeTotal, setIncomeTotal] = useState(0);
+  const [monthRefunds, setMonthRefunds] = useState(0);
   const [accountList, setAccountList] = useState<Account[]>([]);
   const [pendingIncome, setPendingIncome] = useState<Income[]>([]);
   const [claims, setClaims] = useState<Expense[]>([]);
@@ -113,7 +117,9 @@ export default function DashboardPage() {
       setNetWorth(netWorthJson.data || null);
       setRental(rentalJson.data || null);
       setLoans(loansJson.data || []);
-      setIncomeTotal((incomesJson.data || []).reduce((s: number, i: { amount: number }) => s + Number(i.amount), 0));
+      // Refunds / cashback reduce spending rather than counting as income.
+      setIncomeTotal(earnedIncome(incomesJson.data || []));
+      setMonthRefunds(refundsReceived(incomesJson.data || []));
       setClaims(claimsJson.data || []);
       setAccountList(accountsJson.data || []);
       setPendingIncome(pendingJson.data || []);
@@ -153,7 +159,7 @@ export default function DashboardPage() {
   }
 
   // All spending figures are out-of-pocket: company-reimbursable expenses are left out.
-  const totalSpent = expenses.reduce((s, e) => s + outOfPocket(e), 0);
+  const totalSpent = netOfRefunds(expenses.reduce((s, e) => s + outOfPocket(e), 0), monthRefunds);
   const reimbursableThisMonth = expenses.reduce((s, e) => s + Number(e.amount) - outOfPocket(e), 0);
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
   const currentDay = Math.min(now.getDate(), daysInMonth);

@@ -50,6 +50,29 @@ export function outOfPocket(
   return 0;
 }
 
+/**
+ * Refunds and cashback give back money you already spent. They are not earnings, so they are
+ * left out of income totals (and savings rates) and taken off spending instead.
+ */
+export function isRefund(i: Pick<Income, "type">): boolean {
+  return i.type === "refund";
+}
+
+/** Income you earned: everything except refunds / cashback. */
+export function earnedIncome(list: Pick<Income, "type" | "amount">[]): number {
+  return list.filter((i) => !isRefund(i)).reduce((s, i) => s + Number(i.amount), 0);
+}
+
+/** Refunds / cashback actually received, which reduce spending. */
+export function refundsReceived(list: Pick<Income, "type" | "amount" | "is_received">[]): number {
+  return list.filter((i) => isRefund(i) && i.is_received).reduce((s, i) => s + Number(i.amount), 0);
+}
+
+/** Spending after refunds, never below zero. */
+export function netOfRefunds(spent: number, refunds: number): number {
+  return Math.max(0, spent - refunds);
+}
+
 /** Amount still expected back from the company for this expense. */
 export function reimbursementDue(
   e: Pick<Expense, "amount" | "is_reimbursable" | "reimbursement_status">
@@ -295,7 +318,96 @@ export type LedgerKind =
   | "transfer_in"
   | "transfer_out"
   /** Principal repaid on a Debt Tracker loan or card through a bill payment. */
-  | "debt_payment";
+  | "debt_payment"
+  /** "Match my bank balance" correction (account_adjustments). */
+  | "adjustment"
+  /** Cash spent buying, or received selling, an investment holding. */
+  | "investment_buy"
+  | "investment_sell";
+
+/** A dated correction that makes an account's calculated balance match the bank. */
+export interface AccountAdjustment {
+  id: string;
+  user_id: string;
+  account_id: string;
+  date: string;
+  /** Signed ledger amount: + money in, − money out. */
+  amount: number;
+  previous_balance: number;
+  new_balance: number;
+  note: string;
+  created_at: string;
+}
+
+// --- Investments ---
+
+export type InvestmentAssetType =
+  | "mutual_fund"
+  | "stock"
+  | "etf"
+  | "bond"
+  | "fixed_deposit"
+  | "gold"
+  | "crypto"
+  | "retirement"
+  | "other";
+
+export const INVESTMENT_ASSET_LABELS: Record<InvestmentAssetType, string> = {
+  mutual_fund: "Mutual fund",
+  stock: "Stock",
+  etf: "ETF",
+  bond: "Bond",
+  fixed_deposit: "Fixed deposit",
+  gold: "Gold",
+  crypto: "Crypto",
+  retirement: "PPF / EPF / NPS",
+  other: "Other",
+};
+
+export const INVESTMENT_ASSET_COLORS: Record<InvestmentAssetType, string> = {
+  mutual_fund: "#8b5cf6",
+  stock: "#2563eb",
+  etf: "#0891b2",
+  bond: "#64748b",
+  fixed_deposit: "#16a34a",
+  gold: "#ca8a04",
+  crypto: "#ea580c",
+  retirement: "#db2777",
+  other: "#94a3b8",
+};
+
+export interface InvestmentHolding {
+  id: string;
+  user_id: string;
+  name: string;
+  asset_type: InvestmentAssetType;
+  symbol: string;
+  /** Latest price per unit you entered; null = valued at cost. */
+  current_price: number | null;
+  valued_on: string | null;
+  note: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type InvestmentTransactionType = "buy" | "sell" | "opening";
+
+export interface InvestmentTransaction {
+  id: string;
+  user_id: string;
+  holding_id: string;
+  type: InvestmentTransactionType;
+  date: string;
+  quantity: number;
+  price: number;
+  fees: number;
+  /** Cash account used; null for "opening" (already owned) or untracked cash. */
+  account_id: string | null;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
 
 /** One line on an account statement. amount is signed: + money in, − money out. */
 export interface LedgerEntry {
@@ -362,6 +474,9 @@ export interface Budget {
 }
 
 export interface BudgetWithSpent extends Budget {
+  /** Days this budget is measured over right now (YYYY-MM-DD, inclusive). */
+  window_start: string;
+  window_end: string;
   spent: number;
   remaining: number;
   percentage: number;

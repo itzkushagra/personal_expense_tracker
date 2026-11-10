@@ -39,6 +39,9 @@ import {
   CATEGORY_COLORS,
   SAVINGS_CATEGORIES,
   outOfPocket,
+  earnedIncome,
+  netOfRefunds,
+  refundsReceived,
 } from "@/types";
 import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
@@ -138,15 +141,17 @@ export default function YearlyPage() {
   const sumSpent = (list: Expense[]) => list.reduce((s, e) => s + outOfPocket(e), 0);
   const sumInvested = (list: Expense[]) =>
     list.filter((e) => SAVINGS_CATEGORIES.includes(e.category)).reduce((s, e) => s + Number(e.amount), 0);
-  const sumIncome = (list: Income[]) => list.reduce((s, i) => s + Number(i.amount), 0);
+  // Refunds / cashback are money back on spending, not earnings.
+  const sumIncome = (list: Income[]) => earnedIncome(list);
+  const spentAfterRefunds = (list: Expense[], inc: Income[]) => netOfRefunds(sumSpent(list), refundsReceived(inc));
 
   const earned = sumIncome(incomes);
-  const spent = sumSpent(expenses);
+  const spent = spentAfterRefunds(expenses, incomes);
   const invested = sumInvested(expenses);
   const saved = earned - spent;
   const savingsRate = earned > 0 ? (saved / earned) * 100 : 0;
   const prevEarned = sumIncome(prevIncomes);
-  const prevSpent = sumSpent(prevExpenses);
+  const prevSpent = spentAfterRefunds(prevExpenses, prevIncomes);
   const prevSaved = prevEarned - prevSpent;
   const pendingIncome = incomes.filter((i) => !i.is_received).reduce((s, i) => s + Number(i.amount), 0);
 
@@ -154,7 +159,7 @@ export default function YearlyPage() {
     const e = expenses.filter((x) => x.date.startsWith(m.key));
     const inc = incomes.filter((x) => x.for_month.startsWith(m.key));
     const mEarned = sumIncome(inc);
-    const mSpent = sumSpent(e);
+    const mSpent = netOfRefunds(sumSpent(e), refundsReceived(inc));
     return {
       ...m,
       earned: Math.round(mEarned),

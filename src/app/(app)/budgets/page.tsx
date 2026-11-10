@@ -31,15 +31,17 @@ import {
   Home,
 } from "lucide-react";
 import {
+  type BudgetPeriod,
   type BudgetWithSpent,
   type Rental,
   type Expense,
   SPENDING_CATEGORIES,
   CATEGORY_COLORS,
   HOUSING_CATEGORIES,
+  earnedIncome,
 } from "@/types";
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
 
@@ -48,6 +50,8 @@ export default function BudgetsPage() {
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState<BudgetWithSpent | null>(null);
+  // Period chosen in the form: weekly and custom budgets also need dates.
+  const [formPeriod, setFormPeriod] = useState<BudgetPeriod>("monthly");
   const [saving, setSaving] = useState(false);
 
   const [rental, setRental] = useState<Rental | null>(null);
@@ -73,7 +77,7 @@ export default function BudgetsPage() {
       ]);
       setBudgets(json.data || []);
       setRental(rentalJson.data || null);
-      setMonthIncome((incJson.data || []).reduce((s: number, i: { amount: number }) => s + Number(i.amount), 0));
+      setMonthIncome(earnedIncome(incJson.data || []));
       setMonthExpenses(expJson.data || []);
     } catch {
       toast.error("Failed to load budgets");
@@ -96,9 +100,21 @@ export default function BudgetsPage() {
     const body = {
       category: fd.get("category"),
       amount: parseFloat(fd.get("amount") as string),
-      period: fd.get("period") || "monthly",
+      period: formPeriod,
       alert_threshold: parseFloat(fd.get("alert_threshold") as string) || 80,
+      // Weekly budgets repeat every 7 days from the start date; custom ones run start to end.
+      ...(formPeriod === "monthly"
+        ? {}
+        : {
+            start_date: (fd.get("start_date") as string) || toLocalDateString(),
+            end_date: formPeriod === "custom" ? (fd.get("end_date") as string) || null : null,
+          }),
     };
+    if (body.end_date && body.start_date && body.end_date < body.start_date) {
+      toast.error("End date must be on or after the start date");
+      setSaving(false);
+      return;
+    }
 
     try {
       const url = editing ? `/api/budgets/${editing.id}` : "/api/budgets";
@@ -291,7 +307,7 @@ export default function BudgetsPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Category Budgets</CardTitle>
-          <Dialog open={showDialog} onOpenChange={(o) => { setShowDialog(o); if (!o) setEditing(null); }}>
+          <Dialog open={showDialog} onOpenChange={(o) => { setShowDialog(o); if (o) setFormPeriod("monthly"); else setEditing(null); }}>
             <DialogTrigger render={<Button size="sm" />}>
               <Plus className="mr-1 h-4 w-4" /> Add Budget
             </DialogTrigger>
@@ -318,7 +334,7 @@ export default function BudgetsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Period</Label>
-                    <Select name="period" defaultValue={editing?.period || "monthly"}>
+                    <Select name="period" value={formPeriod} onValueChange={(v) => setFormPeriod((v as BudgetPeriod) || "monthly")}>
                       <SelectTrigger><SelectValue>{(v: string) => ({ weekly: "Weekly", monthly: "Monthly", custom: "Custom" } as Record<string, string>)[v] ?? v}</SelectValue></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="weekly">Weekly</SelectItem>
@@ -328,6 +344,25 @@ export default function BudgetsPage() {
                     </Select>
                   </div>
                 </div>
+                {formPeriod !== "monthly" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="bud-start">{formPeriod === "weekly" ? "Week starts on" : "Start date"}</Label>
+                      <Input id="bud-start" name="start_date" type="date" required defaultValue={editing?.start_date?.slice(0, 10) || toLocalDateString()} />
+                    </div>
+                    {formPeriod === "custom" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="bud-end">End date</Label>
+                        <Input id="bud-end" name="end_date" type="date" defaultValue={editing?.end_date?.slice(0, 10) || ""} />
+                      </div>
+                    )}
+                    <p className="col-span-2 text-xs text-muted-foreground">
+                      {formPeriod === "weekly"
+                        ? "Counts spending in 7-day cycles from this date."
+                        : "Counts spending between these dates (to today if there's no end date)."}
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="bud-alert">Alert Threshold (%)</Label>
                   <Input id="bud-alert" name="alert_threshold" type="number" min="50" max="100" defaultValue={editing?.alert_threshold || 80} />
@@ -353,7 +388,7 @@ export default function BudgetsPage() {
                       <div className="h-3 w-3 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[budget.category] || "#94a3b8" }} />
                       <div>
                         <p className="font-medium">{budget.category}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{budget.period}</p>
+                        <p className="text-xs text-muted-foreground"><span className="capitalize">{budget.period}</span>{budget.period !== "monthly" && budget.window_start ? ` · ${formatDate(budget.window_start)} – ${formatDate(budget.window_end)}` : ""}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -382,7 +417,7 @@ export default function BudgetsPage() {
                       )}
                     </div>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(budget); setShowDialog(true); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(budget); setFormPeriod(budget.period); setShowDialog(true); }}>
                         <Pencil className="h-3 w-3" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(budget.id)}>

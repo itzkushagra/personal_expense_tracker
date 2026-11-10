@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Account, type Debt, type LoanDirection, loanBalance, reimbursementDue } from "@/types";
 import { withLiveBalances } from "@/lib/ledger";
+import { todayInAppZone } from "@/lib/dates";
+import { loadPortfolio } from "@/lib/investments";
 
 export interface NetWorthBreakdown {
   total_assets: number;
@@ -12,7 +14,7 @@ export interface NetWorthBreakdown {
   adjustments: {
     security_deposit: number;
     pending_reimbursements: number;
-    /** Earned income not received yet (e.g. salary due with F&F). */
+    /** Income for months that have ended but isn't received yet (e.g. salary due with F&F). */
     pending_income: number;
     /** Held for, or borrowed from, friends & family. */
     owed_by_you: number;
@@ -20,8 +22,25 @@ export interface NetWorthBreakdown {
     owed_to_you: number;
     /** Active Debt Tracker balances not already counted as accounts. */
     tracked_debt: number;
+    /** Investment holdings at their latest entered value (cost when none entered). */
+    investments: number;
   };
   account_count: number;
+}
+
+/**
+ * Unreceived income that counts as money owed to you: only income for a month that has
+ * already ended (salary or F&F you have earned). Expected income for this month or later
+ * isn't yours yet, so it stays out of net worth until it is earned.
+ */
+export function earnedIncomeDue(
+  pending: { amount: number; for_month: string; is_received?: boolean }[],
+  today: string
+): number {
+  const thisMonth = `${today.slice(0, 7)}-01`;
+  return pending
+    .filter((i) => i.is_received !== true && i.for_month.slice(0, 10) < thisMonth)
+    .reduce((s, i) => s + Number(i.amount), 0);
 }
 
 /**
@@ -55,11 +74,14 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
       .eq("user_id", userId)
       .eq("is_reimbursable", true)
       .in("reimbursement_status", ["pending", "submitted"]),
-    supabase.from("incomes").select("amount").eq("user_id", userId).eq("is_received", false),
+    supabase.from("incomes").select("amount, for_month").eq("user_id", userId).eq("is_received", false),
   ]);
 
   // Balances are calculated from every linked transaction, not typed in.
-  const accounts = await withLiveBalances(supabase, userId, (rawAccounts || []) as Account[]);
+  const [accounts, portfolio] = await Promise.all([
+    withLiveBalances(supabase, userId, (rawAccounts || []) as Account[]),
+    loadPortfolio(supabase, userId),
+  ]);
 
   const breakdown: Record<string, number> = {};
   let totalAssets = 0;
@@ -74,6 +96,14 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     }
   }
 
+  // Investment holdings are assets. Buying one moved cash out of an account (counted above),
+  // so the holding takes its place and net worth doesn't drop at the moment of purchase.
+  const investments = portfolio.summary.current_value;
+  if (investments > 0) {
+    breakdown["Investment portfolio"] = investments;
+    totalAssets += investments;
+  }
+
   // Refundable rent deposit and pending company claims are money owed to you.
   const deposit = Number(rental?.security_deposit || 0);
   if (deposit > 0) {
@@ -86,8 +116,8 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     totalAssets += claimsDue;
   }
 
-  // Salary / F&F you've earned but not received yet.
-  const incomeDue = (pendingIncome || []).reduce((s, i) => s + Number(i.amount), 0);
+  // Salary / F&F earned for a finished month but not received yet.
+  const incomeDue = earnedIncomeDue(pendingIncome || [], todayInAppZone());
   if (incomeDue > 0) {
     breakdown["Income still to receive"] = incomeDue;
     totalAssets += incomeDue;
@@ -133,6 +163,7 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
       owed_by_you: owedByYou,
       owed_to_you: owedToYou,
       tracked_debt: trackedDebt,
+      investments,
     },
     account_count: (accounts || []).length,
   };
