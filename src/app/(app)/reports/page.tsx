@@ -35,6 +35,7 @@ import {
 import { type Expense, type Income, CATEGORY_COLORS, outOfPocket } from "@/types";
 import { formatCurrency, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 type TimeRange = "3m" | "6m" | "1y" | "all";
 
@@ -45,7 +46,6 @@ export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("6m");
 
   const fetchExpenses = useCallback(async () => {
-    setLoading(true);
     try {
       const [res, incRes] = await Promise.all([fetch("/api/expenses?limit=5000"), fetch("/api/incomes")]);
       const [json, incJson] = await Promise.all([res.json(), incRes.json()]);
@@ -58,7 +58,7 @@ export default function ReportsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+  useEffect(() => { startLoad(fetchExpenses); }, [fetchExpenses]);
 
   const now = new Date();
   const rangeMonths = timeRange === "3m" ? 3 : timeRange === "6m" ? 6 : timeRange === "1y" ? 12 : 120;

@@ -44,9 +44,16 @@ import {
   outOfPocket,
 } from "@/types";
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
-import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
+import {
+  AccountSelect,
+  defaultAccountId,
+  loadAccounts,
+  refreshAccounts,
+  useAccounts,
+} from "@/components/account-select";
 import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -88,7 +95,8 @@ export default function IncomePage() {
   const [prevIncomes, setPrevIncomes] = useState<Income[]>([]);
   const [pending, setPending] = useState<Income[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Which data is on screen; while it differs from the current key the page shows a spinner.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Dialog form state (controlled so "For month" can follow the date until edited by hand)
@@ -100,7 +108,7 @@ export default function IncomePage() {
   const [fForMonthTouched, setFForMonthTouched] = useState(false);
   const [fReceived, setFReceived] = useState(true);
   const [fAccount, setFAccount] = useState<string | null>(null);
-  const { defaultId, loaded: defaultLoaded } = useAccounts();
+  const { defaultId } = useAccounts();
 
   const { month, year } = cursor;
   const forMonthKey = `${year}-${pad(month)}-01`;
@@ -108,8 +116,10 @@ export default function IncomePage() {
   const isCurrentMonth = month === today.getMonth() + 1 && year === today.getFullYear();
   const monthLabel = monthName(forMonthKey, "long");
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const loadKey = `${year}-${month}`;
+  const loading = loadedKey !== loadKey;
+
+  const fetchData = useCallback(async (isActive: () => boolean = () => true) => {
     try {
       const [incRes, prevRes, pendRes, expRes] = await Promise.all([
         fetch(`/api/incomes?month=${month}&year=${year}`),
@@ -123,6 +133,7 @@ export default function IncomePage() {
         pendRes.json(),
         expRes.json(),
       ]);
+      if (!isActive()) return;
       setIncomes(incJson.data || []);
       setPrevIncomes(prevJson.data || []);
       setPending(pendJson.data || []);
@@ -130,23 +141,32 @@ export default function IncomePage() {
     } catch {
       toast.error("Failed to load income");
     } finally {
-      setLoading(false);
+      if (isActive()) setLoadedKey(loadKey);
     }
-  }, [month, year, prev.month, prev.year]);
+  }, [month, year, prev.month, prev.year, loadKey]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Quick add (/income?new=1) opens the form straight away.
-  const [autoOpened, setAutoOpened] = useState(false);
   useEffect(() => {
-    if (autoOpened || !defaultLoaded) return;
-    setAutoOpened(true);
-    if (new URLSearchParams(window.location.search).get("new")) {
+    let active = true;
+    startLoad(() => fetchData(() => active));
+    return () => {
+      active = false;
+    };
+  }, [fetchData]);
+
+  // Quick add (/income?new=1) opens the form once accounts have loaded (for the default account).
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).get("new")) return;
+    let active = true;
+    loadAccounts().then((list) => {
+      if (!active) return;
       window.history.replaceState(null, "", "/income");
-      openDialog(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time check once accounts have loaded
-  }, [autoOpened, defaultLoaded]);
+      openDialog(null, defaultAccountId(list));
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time check on arrival
+  }, []);
 
   function shiftMonth(delta: number) {
     setCursor(({ month: m, year: y }) => {
@@ -155,7 +175,7 @@ export default function IncomePage() {
     });
   }
 
-  function openDialog(income: Income | null) {
+  function openDialog(income: Income | null, newAccountId: string | null = defaultId) {
     setEditing(income);
     if (income) {
       setFType(income.type);
@@ -171,7 +191,7 @@ export default function IncomePage() {
       setFForMonth(`${year}-${pad(month)}`);
       setFForMonthTouched(!isCurrentMonth);
       setFReceived(true);
-      setFAccount(defaultId);
+      setFAccount(newAccountId);
     }
     setShowDialog(true);
   }

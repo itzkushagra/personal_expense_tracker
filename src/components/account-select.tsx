@@ -28,6 +28,16 @@ function load() {
   return cache;
 }
 
+/** Active accounts, from the shared fetch. */
+export function loadAccounts() {
+  return load().then((a) => a.filter((x) => x.is_active !== false));
+}
+
+/** The account marked default, else the first one. */
+export function defaultAccountId(accounts: Account[]) {
+  return accounts.find((a) => a.is_default)?.id ?? accounts[0]?.id ?? null;
+}
+
 export function refreshAccounts() {
   cache = null;
   return load();
@@ -46,7 +56,7 @@ export function useAccounts() {
       listeners.delete(update);
     };
   }, []);
-  const defaultId = accounts?.find((a) => a.is_default)?.id ?? accounts?.[0]?.id ?? null;
+  const defaultId = accounts ? defaultAccountId(accounts) : null;
   return { accounts: accounts ?? [], loaded: accounts !== null, defaultId };
 }
 

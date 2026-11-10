@@ -41,6 +41,7 @@ import {
 import { cn, formatCurrency, toLocalDateString } from "@/lib/utils";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 const ITEMS_PER_PAGE = 25;
 
@@ -74,7 +75,8 @@ interface ExpenseListProps {
 export function ExpenseList({ refreshKey = 0, onAdd, onEdit }: ExpenseListProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [count, setCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  // Which data is on screen; while it differs from the current key the page shows a spinner.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterMonth, setFilterMonth] = useState(MONTH_OPTIONS[0].value);
@@ -107,26 +109,34 @@ export function ExpenseList({ refreshKey = 0, onAdd, onEdit }: ExpenseListProps)
     return params;
   }, [filterCategory, filterMonth, filterAccount, search]);
 
-  const fetchExpenses = useCallback(async () => {
-    setLoading(true);
+  const loadKey = `${buildParams()}|${page}`;
+  const loading = loadedKey !== loadKey;
+
+  const fetchExpenses = useCallback(async (isActive: () => boolean = () => true) => {
     const params = buildParams();
     params.set("limit", String(ITEMS_PER_PAGE));
     params.set("offset", String(page * ITEMS_PER_PAGE));
     try {
       const res = await fetch(`/api/expenses?${params}`);
       const json = await res.json();
+      if (!isActive()) return;
       setExpenses(json.data || []);
       setCount(json.count || 0);
       setSelected(new Set());
     } catch {
       toast.error("Failed to load expenses");
     } finally {
-      setLoading(false);
+      if (isActive()) setLoadedKey(loadKey);
     }
-  }, [buildParams, page]);
+  }, [buildParams, page, loadKey]);
 
   useEffect(() => {
-    fetchExpenses();
+    let active = true;
+    startLoad(() => fetchExpenses(() => active));
+    return () => {
+      active = false;
+    };
+    // refreshKey: the parent asks for a reload after a save.
   }, [fetchExpenses, refreshKey]);
 
   function afterChange() {

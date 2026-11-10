@@ -29,6 +29,7 @@ import {
 } from "@/types";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 interface Statement {
   account: Account;
@@ -52,25 +53,35 @@ const KIND_META: Record<LedgerKind, { label: string; icon: React.ElementType; hr
 export default function AccountStatementPage() {
   const params = useParams<{ id: string }>();
   const [statement, setStatement] = useState<Statement | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Which data is on screen; while it differs from the current key the page shows a spinner.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("");
 
-  const fetchStatement = useCallback(async () => {
-    setLoading(true);
+  const loadKey = params.id;
+  const loading = loadedKey !== loadKey;
+
+  const fetchStatement = useCallback(async (isActive: () => boolean = () => true) => {
     try {
       const res = await fetch(`/api/accounts/${params.id}/statement`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
+      if (!isActive()) return;
       setStatement(json.data);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to load statement");
     } finally {
-      setLoading(false);
+      if (isActive()) setLoadedKey(loadKey);
     }
-  }, [params.id]);
+  }, [params.id, loadKey]);
 
-  useEffect(() => { fetchStatement(); }, [fetchStatement]);
+  useEffect(() => {
+    let active = true;
+    startLoad(() => fetchStatement(() => active));
+    return () => {
+      active = false;
+    };
+  }, [fetchStatement]);
 
   if (loading) {
     return (

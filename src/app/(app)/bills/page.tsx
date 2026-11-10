@@ -48,6 +48,7 @@ import { emiSplit } from "@/lib/bill-payments";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -82,7 +83,6 @@ export default function BillsPage() {
   const accountName = (id: string | null) => accounts.find((a) => a.id === id)?.name;
 
   const fetchBills = useCallback(async () => {
-    setLoading(true);
     try {
       const [res, debtRes] = await Promise.all([fetch("/api/bills"), fetch("/api/debts")]);
       const [json, debtJson] = await Promise.all([res.json(), debtRes.json()]);
@@ -95,7 +95,7 @@ export default function BillsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchBills(); }, [fetchBills]);
+  useEffect(() => { startLoad(fetchBills); }, [fetchBills]);
 
   /** Load the bill's kind fields into the form when it opens (blank for a new bill). */
   function syncKindFields(bill: Bill | null) {

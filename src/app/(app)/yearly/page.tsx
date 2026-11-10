@@ -42,6 +42,7 @@ import {
 } from "@/types";
 import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 type Mode = "calendar" | "fy";
 
@@ -85,7 +86,8 @@ export default function YearlyPage() {
   const [mode, setMode] = useState<Mode>("calendar");
   const currentFyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
   const [year, setYear] = useState(now.getFullYear());
-  const [loading, setLoading] = useState(true);
+  // Which data is on screen; while it differs from the current key the page shows a spinner.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [prevExpenses, setPrevExpenses] = useState<Expense[]>([]);
   const [incomes, setIncomes] = useState<Income[]>([]);
@@ -95,8 +97,10 @@ export default function YearlyPage() {
   const prev = period(year - 1, mode);
   const latestYear = mode === "fy" ? currentFyStart : now.getFullYear();
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const loadKey = `${cur.from}|${cur.to}`;
+  const loading = loadedKey !== loadKey;
+
+  const fetchData = useCallback(async (isActive: () => boolean = () => true) => {
     try {
       const [e1, e0, i1, i0] = await Promise.all([
         fetch(`/api/expenses?from=${cur.from}&to=${cur.to}&limit=10000`),
@@ -105,6 +109,7 @@ export default function YearlyPage() {
         fetch(`/api/incomes?from=${prev.from}&to=${prev.to}`),
       ]);
       const [j1, j0, k1, k0] = await Promise.all([e1.json(), e0.json(), i1.json(), i0.json()]);
+      if (!isActive()) return;
       setExpenses(j1.data || []);
       setPrevExpenses(j0.data || []);
       setIncomes(k1.data || []);
@@ -112,11 +117,17 @@ export default function YearlyPage() {
     } catch {
       toast.error("Failed to load yearly data");
     } finally {
-      setLoading(false);
+      if (isActive()) setLoadedKey(loadKey);
     }
-  }, [cur.from, cur.to, prev.from, prev.to]);
+  }, [cur.from, cur.to, prev.from, prev.to, loadKey]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    let active = true;
+    startLoad(() => fetchData(() => active));
+    return () => {
+      active = false;
+    };
+  }, [fetchData]);
 
   function switchMode(m: Mode) {
     setMode(m);

@@ -37,6 +37,7 @@ import {
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 /** Indian financial year (Apr–Mar) containing the given date. */
 function financialYear(d: Date) {
@@ -80,7 +81,9 @@ export default function RentPage() {
   const payAccountId = payAccount === undefined ? rentBill?.account_id ?? defaultId : payAccount;
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
     try {
       const [rentalRes, rentRes, monthRes, billsRes] = await Promise.all([
         fetch("/api/rental"),
@@ -103,9 +106,9 @@ export default function RentPage() {
     } finally {
       setLoading(false);
     }
-  }, [month, year]);
+  }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { startLoad(fetchData); }, [fetchData]);
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

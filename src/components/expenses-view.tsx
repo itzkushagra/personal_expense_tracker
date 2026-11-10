@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,13 @@ import { type Expense } from "@/types";
 
 export function ExpensesView() {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const [open, setOpen] = useState(() => searchParams.get("add") === "1");
   const [editing, setEditing] = useState<Expense | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [defaultReimbursable, setDefaultReimbursable] = useState(false);
+  const [defaultReimbursable, setDefaultReimbursable] = useState(
+    () => searchParams.get("add") === "1" && searchParams.get("reimbursable") === "1"
+  );
 
   // Old links still work: /expenses?add=1 opens "Add" (&reimbursable=1 pre-ticks the
   // company-claim box, used by quick add), /expenses?edit=<id> opens "Edit" for that
@@ -23,9 +26,7 @@ export function ExpensesView() {
     const params = new URLSearchParams(window.location.search);
     const editId = params.get("edit");
     if (params.get("add") === "1") {
-      setEditing(null);
-      setDefaultReimbursable(params.get("reimbursable") === "1");
-      setOpen(true);
+      // Already open from the first render.
     } else if (editId) {
       fetch(`/api/expenses/${editId}`)
         .then((r) => (r.ok ? r.json() : Promise.reject()))

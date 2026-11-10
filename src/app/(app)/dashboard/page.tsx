@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { QUICK_ACTIONS } from "@/components/layout/quick-add";
 import { formatCurrency, daysUntil, toLocalDateString } from "@/lib/utils";
+import { startLoad } from "@/lib/load";
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -70,7 +71,9 @@ export default function DashboardPage() {
   const currentYear = now.getFullYear();
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
     try {
       const [expensesRes, summaryRes, budgetsRes, goalsRes, billsRes, netWorthRes, rentalRes, loansRes, claimsRes, incomesRes, accountsRes, pendingRes] = await Promise.all([
         fetch(`/api/expenses?month=${currentMonth}&year=${currentYear}&limit=1000`),
@@ -137,9 +140,9 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentMonth, currentYear]);
+  }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { startLoad(fetchData); }, [fetchData]);
 
   if (loading) {
     return (

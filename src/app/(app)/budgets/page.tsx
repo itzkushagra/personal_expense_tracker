@@ -41,6 +41,7 @@ import {
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 export default function BudgetsPage() {
   const [budgets, setBudgets] = useState<BudgetWithSpent[]>([]);
@@ -55,7 +56,6 @@ export default function BudgetsPage() {
   const [monthExpenses, setMonthExpenses] = useState<Expense[]>([]);
 
   const fetchBudgets = useCallback(async () => {
-    setLoading(true);
     try {
       const now = new Date();
       const period = `month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
@@ -82,7 +82,7 @@ export default function BudgetsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
+  useEffect(() => { startLoad(fetchBudgets); }, [fetchBudgets]);
 
   const totalBudget = budgets.reduce((s, b) => s + Number(b.amount), 0);
   const totalSpent = budgets.reduce((s, b) => s + b.spent, 0);

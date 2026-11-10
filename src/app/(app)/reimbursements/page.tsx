@@ -33,6 +33,7 @@ import { cn, formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { toast } from "sonner";
 import { ExpenseDialog } from "@/components/expense-dialog";
+import { startLoad } from "@/lib/load";
 
 const TABS: ReimbursementStatus[] = ["pending", "submitted", "reimbursed", "rejected"];
 
@@ -51,7 +52,6 @@ export default function ReimbursementsPage() {
   const payoutAccountId = payoutAccount === undefined ? defaultId : payoutAccount;
 
   const fetchClaims = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/reimbursements");
       const json = await res.json();
@@ -63,7 +63,7 @@ export default function ReimbursementsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchClaims(); }, [fetchClaims]);
+  useEffect(() => { startLoad(fetchClaims); }, [fetchClaims]);
 
   const byStatus = (s: ReimbursementStatus) => claims.filter((c) => c.reimbursement_status === s);
   const sum = (list: Expense[], field: "amount" | "reimbursed_amount" = "amount") =>

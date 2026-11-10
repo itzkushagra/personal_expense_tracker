@@ -47,6 +47,7 @@ import {
 import { cn, formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 const DIRECTION_INFO: Record<
   LoanDirection,
@@ -95,7 +96,6 @@ export default function PeopleLoansPage() {
   const entryAccountId = entryAccount === undefined ? defaultId : entryAccount;
 
   const fetchLoans = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/people-loans");
       const json = await res.json();
@@ -107,15 +107,19 @@ export default function PeopleLoansPage() {
     }
   }, []);
 
-  useEffect(() => { fetchLoans(); }, [fetchLoans]);
-
-  // Quick add (/people?new=1) opens the form straight away.
+  // Quick add (/people?new=1) opens the form once the page has loaded.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("new")) {
+    const wantsNew = new URLSearchParams(window.location.search).get("new");
+    let active = true;
+    startLoad(fetchLoans).then(() => {
+      if (!active || !wantsNew) return;
       window.history.replaceState(null, "", "/people");
       setShowDialog(true);
-    }
-  }, []);
+    });
+    return () => {
+      active = false;
+    };
+  }, [fetchLoans]);
 
   const active = loans.filter((l) => l.balance > 0);
   const settled = loans.filter((l) => l.balance <= 0);

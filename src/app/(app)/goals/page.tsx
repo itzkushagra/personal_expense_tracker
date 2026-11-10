@@ -34,6 +34,7 @@ import {
 import { type Goal } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -45,7 +46,6 @@ export default function GoalsPage() {
   const [contributeAmount, setContributeAmount] = useState("");
 
   const fetchGoals = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/goals");
       const json = await res.json();
@@ -57,7 +57,7 @@ export default function GoalsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchGoals(); }, [fetchGoals]);
+  useEffect(() => { startLoad(fetchGoals); }, [fetchGoals]);
 
   const emergencyFund = goals.find((g) => g.priority === "emergency");
   const activeGoals = goals.filter((g) => !g.is_completed);

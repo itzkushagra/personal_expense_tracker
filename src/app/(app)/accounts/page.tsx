@@ -63,6 +63,7 @@ import type { NetWorthBreakdown } from "@/lib/net-worth";
 import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { AccountSelect, refreshAccounts } from "@/components/account-select";
 import { toast } from "sonner";
+import { startLoad } from "@/lib/load";
 
 const ACCOUNT_ICONS: Record<AccountType, React.ElementType> = {
   checking: Landmark,
@@ -98,7 +99,6 @@ export default function AccountsPage() {
   const [linkFrom, setLinkFrom] = useState("");
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     try {
       const [accRes, debtRes, nwRes, currentRes, trRes, unlinkedRes] = await Promise.all([
         fetch("/api/accounts"),
@@ -123,6 +123,7 @@ export default function AccountsPage() {
       setDebts(debtJson.data || []);
       setNetWorthHistory(nwJson.data || []);
       setCurrent(currentJson.data || null);
+      return (accJson.data || []) as Account[];
     } catch {
       toast.error("Failed to load data");
     } finally {
@@ -130,23 +131,21 @@ export default function AccountsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   // Quick add (/accounts?transfer=1) opens the transfer form once accounts are loaded.
-  const [transferRequested, setTransferRequested] = useState(false);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("transfer")) {
+    const wantsTransfer = new URLSearchParams(window.location.search).get("transfer");
+    let active = true;
+    startLoad(fetchData).then((list) => {
+      if (!active || !wantsTransfer || !list) return;
       window.history.replaceState(null, "", "/accounts");
-      setTransferRequested(true);
-    }
-  }, []);
-  useEffect(() => {
-    if (!transferRequested || loading) return;
-    setTransferRequested(false);
-    if (accounts.length >= 2) openTransfer(null);
-    else toast.info("Add at least two accounts to record a transfer");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once when the request and data are both ready
-  }, [transferRequested, loading]);
+      if (list.length >= 2) openTransfer(null, list);
+      else toast.info("Add at least two accounts to record a transfer");
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openTransfer only uses state setters and the list passed in
+  }, [fetchData]);
 
   const totalAssets = current?.total_assets ?? 0;
   const totalLiabilities = current?.total_liabilities ?? 0;
@@ -231,11 +230,11 @@ export default function AccountsPage() {
     }
   }
 
-  function openTransfer(t: Transfer | null) {
+  function openTransfer(t: Transfer | null, list: Account[] = accounts) {
     setEditingTransfer(t);
-    const first = accounts.find((a) => a.is_default)?.id ?? accounts[0]?.id ?? null;
+    const first = list.find((a) => a.is_default)?.id ?? list[0]?.id ?? null;
     setTFrom(t ? t.from_account_id : first);
-    setTTo(t ? t.to_account_id : accounts.find((a) => a.id !== first)?.id ?? null);
+    setTTo(t ? t.to_account_id : list.find((a) => a.id !== first)?.id ?? null);
     setShowTransferDialog(true);
   }
 
