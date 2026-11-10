@@ -342,7 +342,7 @@ expense-tracker/
 │       └── index.ts                # TypeScript types
 ├── supabase/
 │   └── migrations/
-│       └── 001_initial_schema.sql  # DB migration
+│       └── 001…008, 0015_*.sql     # DB migrations (0015 runs between 001 and 002)
 ├── public/
 │   ├── icons/                      # PWA icons
 │   └── manifest.json               # PWA manifest

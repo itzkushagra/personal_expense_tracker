@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 /** Every schema file, in the order they are run in Supabase. */
 export const MIGRATIONS = [
   "supabase/migrations/001_initial_schema.sql",
-  "supabase-migration.sql",
+  "supabase/migrations/0015_core_finance_tables.sql",
   "supabase/migrations/002_rent_held_money_reimbursements.sql",
   "supabase/migrations/003_income_and_people_loans.sql",
   "supabase/migrations/004_income_for_month.sql",

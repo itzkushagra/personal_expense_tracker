@@ -1,5 +1,5 @@
 -- SpendWise: Rent, money held for others, and company reimbursements
--- Run this in your Supabase SQL Editor after supabase-migration.sql
+-- Run this in your Supabase SQL Editor after 0015_core_finance_tables.sql
 
 -- 1. Rental details (one row per user)
 CREATE TABLE IF NOT EXISTS rentals (
