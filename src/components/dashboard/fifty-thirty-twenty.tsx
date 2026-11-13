@@ -4,10 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { type Expense, NEEDS_CATEGORIES, isSavingsCategory, outOfPocket } from "@/types";
 import { formatCurrency } from "@/lib/utils";
+import { type InvestmentPurchase, investedTotal } from "@/lib/invested";
 
 interface FiftyThirtyTwentyProps {
   income: number;
   expenses: Expense[];
+  /** Buys on the Investments page in the same period; counted where SIPs weren't logged as expenses. */
+  purchases?: InvestmentPurchase[];
   title?: string;
 }
 
@@ -15,15 +18,12 @@ interface FiftyThirtyTwentyProps {
  * Compares this month's out-of-pocket spending against the 50/30/20 guideline:
  * 50% of income on needs, 30% on wants, 20% saved.
  */
-export function FiftyThirtyTwenty({ income, expenses, title = "50/30/20 Check" }: FiftyThirtyTwentyProps) {
+export function FiftyThirtyTwenty({ income, expenses, purchases = [], title = "50/30/20 Check" }: FiftyThirtyTwentyProps) {
   let needs = 0;
   let wants = 0;
-  let putAside = 0;
+  const putAside = investedTotal(expenses, purchases);
   for (const e of expenses) {
-    if (isSavingsCategory(e.category)) {
-      putAside += Number(e.amount);
-      continue;
-    }
+    if (isSavingsCategory(e.category)) continue;
     const own = outOfPocket(e);
     if (NEEDS_CATEGORIES.includes(e.category)) needs += own;
     else wants += own;
@@ -50,7 +50,7 @@ export function FiftyThirtyTwenty({ income, expenses, title = "50/30/20 Check" }
     {
       label: "Savings",
       hint: putAside > 0
-        ? `incl. ${formatCurrency(putAside)} logged as savings / investments`
+        ? `incl. ${formatCurrency(putAside)} saved / invested`
         : "what's left after spending",
       actual: Math.max(0, saved),
       target: income * 0.2,

@@ -40,12 +40,12 @@ import {
   type Expense,
   INCOME_TYPE_LABELS,
   INCOME_TYPE_COLORS,
-  SAVINGS_CATEGORIES,
   outOfPocket,
   earnedIncome,
   netOfRefunds,
   refundsReceived,
 } from "@/types";
+import { type InvestmentPurchase, investedTotal } from "@/lib/invested";
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
 import {
   AccountSelect,
@@ -99,6 +99,7 @@ export default function IncomePage() {
   const [prevIncomes, setPrevIncomes] = useState<Income[]>([]);
   const [pending, setPending] = useState<Income[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [purchases, setPurchases] = useState<InvestmentPurchase[]>([]);
   // Which data is on screen; while it differs from the current key the page shows a spinner.
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -127,23 +128,29 @@ export default function IncomePage() {
 
   const fetchData = useCallback(async (isActive: () => boolean = () => true) => {
     try {
-      const [incRes, prevRes, pendRes, expRes] = await Promise.all([
+      const monthStart = `${year}-${pad(month)}-01`;
+      const monthEnd = `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
+      const [incRes, prevRes, pendRes, expRes, buyRes] = await Promise.all([
         fetch(`/api/incomes?month=${month}&year=${year}`),
         fetch(`/api/incomes?month=${prev.month}&year=${prev.year}`),
         fetch("/api/incomes?pending=1"),
         fetch(`/api/expenses?month=${month}&year=${year}&limit=1000`),
+        fetch(`/api/investments/purchases?from=${monthStart}&to=${monthEnd}`),
       ]);
-      const [incJson, prevJson, pendJson, expJson] = await Promise.all([
+      const [incJson, prevJson, pendJson, expJson, buyJson] = await Promise.all([
         incRes.json(),
         prevRes.json(),
         pendRes.json(),
         expRes.json(),
+        // Purchases only add to the "invested" figure; the page works without them.
+        buyRes.json().catch(() => ({})),
       ]);
       if (!isActive()) return;
       setIncomes(incJson.data || []);
       setPrevIncomes(prevJson.data || []);
       setPending(pendJson.data || []);
       setExpenses(expJson.data || []);
+      setPurchases(buyRes.ok ? buyJson.data || [] : []);
     } catch {
       toast.error("Failed to load income");
     } finally {
@@ -223,9 +230,8 @@ export default function IncomePage() {
   const totalEarned = totalReceived + totalExpected;
   const refunds = refundsReceived(incomes);
   const totalSpent = netOfRefunds(expenses.reduce((s, e) => s + outOfPocket(e), 0), refunds);
-  const invested = expenses
-    .filter((e) => SAVINGS_CATEGORIES.includes(e.category))
-    .reduce((s, e) => s + Number(e.amount), 0);
+  // Savings/Investments expenses, plus SIPs and other buys logged on the Investments page.
+  const invested = investedTotal(expenses, purchases);
   const leftOver = totalEarned - totalSpent;
   const savingsRate = totalEarned > 0 ? (leftOver / totalEarned) * 100 : 0;
   const prevTotal = earnedIncome(prevIncomes);
@@ -606,7 +612,7 @@ export default function IncomePage() {
               </CardContent>
             </Card>
 
-            <FiftyThirtyTwenty income={totalEarned} expenses={expenses} title={`50/30/20 Check: ${monthLabel}`} />
+            <FiftyThirtyTwenty income={totalEarned} expenses={expenses} purchases={purchases} title={`50/30/20 Check: ${monthLabel}`} />
           </div>
         </>
       )}

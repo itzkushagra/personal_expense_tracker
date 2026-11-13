@@ -37,7 +37,6 @@ import {
   type Expense,
   type Income,
   CATEGORY_COLORS,
-  SAVINGS_CATEGORIES,
   outOfPocket,
   earnedIncome,
   netOfRefunds,
@@ -46,6 +45,7 @@ import {
 import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
+import { type InvestmentPurchase, investedByMonth, investedTotal } from "@/lib/invested";
 
 type Mode = "calendar" | "fy";
 
@@ -95,6 +95,7 @@ export default function YearlyPage() {
   const [prevExpenses, setPrevExpenses] = useState<Expense[]>([]);
   const [incomes, setIncomes] = useState<Income[]>([]);
   const [prevIncomes, setPrevIncomes] = useState<Income[]>([]);
+  const [purchases, setPurchases] = useState<InvestmentPurchase[]>([]);
 
   const cur = period(year, mode);
   const prev = period(year - 1, mode);
@@ -105,18 +106,21 @@ export default function YearlyPage() {
 
   const fetchData = useCallback(async (isActive: () => boolean = () => true) => {
     try {
-      const [e1, e0, i1, i0] = await Promise.all([
+      const [e1, e0, i1, i0, b1] = await Promise.all([
         fetch(`/api/expenses?from=${cur.from}&to=${cur.to}&limit=10000`),
         fetch(`/api/expenses?from=${prev.from}&to=${prev.to}&limit=10000`),
         fetch(`/api/incomes?from=${cur.from}&to=${cur.to}`),
         fetch(`/api/incomes?from=${prev.from}&to=${prev.to}`),
+        fetch(`/api/investments/purchases?from=${cur.from}&to=${cur.to}`),
       ]);
-      const [j1, j0, k1, k0] = await Promise.all([e1.json(), e0.json(), i1.json(), i0.json()]);
+      // Purchases only add to the "invested" figures; the page works without them.
+      const [j1, j0, k1, k0, p1] = await Promise.all([e1.json(), e0.json(), i1.json(), i0.json(), b1.json().catch(() => ({}))]);
       if (!isActive()) return;
       setExpenses(j1.data || []);
       setPrevExpenses(j0.data || []);
       setIncomes(k1.data || []);
       setPrevIncomes(k0.data || []);
+      setPurchases(b1.ok ? p1.data || [] : []);
     } catch {
       toast.error("Failed to load yearly data");
     } finally {
@@ -139,15 +143,15 @@ export default function YearlyPage() {
 
   // ---- Aggregates ----
   const sumSpent = (list: Expense[]) => list.reduce((s, e) => s + outOfPocket(e), 0);
-  const sumInvested = (list: Expense[]) =>
-    list.filter((e) => SAVINGS_CATEGORIES.includes(e.category)).reduce((s, e) => s + Number(e.amount), 0);
+  // Savings/Investments expenses, plus SIPs and other buys logged on the Investments page.
+  const investedMonths = investedByMonth(expenses, purchases);
   // Refunds / cashback are money back on spending, not earnings.
   const sumIncome = (list: Income[]) => earnedIncome(list);
   const spentAfterRefunds = (list: Expense[], inc: Income[]) => netOfRefunds(sumSpent(list), refundsReceived(inc));
 
   const earned = sumIncome(incomes);
   const spent = spentAfterRefunds(expenses, incomes);
-  const invested = sumInvested(expenses);
+  const invested = investedTotal(expenses, purchases);
   const saved = earned - spent;
   const savingsRate = earned > 0 ? (saved / earned) * 100 : 0;
   const prevEarned = sumIncome(prevIncomes);
@@ -164,7 +168,7 @@ export default function YearlyPage() {
       ...m,
       earned: Math.round(mEarned),
       spent: Math.round(mSpent),
-      invested: Math.round(sumInvested(e)),
+      invested: Math.round(investedMonths.get(m.key) ?? 0),
       saved: Math.round(mEarned - mSpent),
       rate: mEarned > 0 ? ((mEarned - mSpent) / mEarned) * 100 : null,
       count: e.length,

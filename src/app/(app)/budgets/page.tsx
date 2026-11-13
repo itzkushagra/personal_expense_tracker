@@ -41,6 +41,7 @@ import {
   earnedIncome,
 } from "@/types";
 import { FiftyThirtyTwenty } from "@/components/dashboard/fifty-thirty-twenty";
+import type { InvestmentPurchase } from "@/lib/invested";
 import { formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
@@ -58,27 +59,34 @@ export default function BudgetsPage() {
   const [showRenterSetup, setShowRenterSetup] = useState(false);
   const [monthIncome, setMonthIncome] = useState(0);
   const [monthExpenses, setMonthExpenses] = useState<Expense[]>([]);
+  const [monthPurchases, setMonthPurchases] = useState<InvestmentPurchase[]>([]);
 
   const fetchBudgets = useCallback(async () => {
     try {
       const now = new Date();
       const period = `month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
-      const [res, rentalRes, incRes, expRes] = await Promise.all([
+      const monthStart = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+      const monthEnd = toLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      const [res, rentalRes, incRes, expRes, buyRes] = await Promise.all([
         fetch("/api/budgets"),
         fetch("/api/rental"),
         fetch(`/api/incomes?${period}`),
         fetch(`/api/expenses?${period}&limit=1000`),
+        fetch(`/api/investments/purchases?from=${monthStart}&to=${monthEnd}`),
       ]);
-      const [json, rentalJson, incJson, expJson] = await Promise.all([
+      const [json, rentalJson, incJson, expJson, buyJson] = await Promise.all([
         res.json(),
         rentalRes.json(),
         incRes.json(),
         expRes.json(),
+        // Purchases only add to the 50/30/20 "invested" note; the page works without them.
+        buyRes.json().catch(() => ({})),
       ]);
       setBudgets(json.data || []);
       setRental(rentalJson.data || null);
       setMonthIncome(earnedIncome(incJson.data || []));
       setMonthExpenses(expJson.data || []);
+      setMonthPurchases(buyRes.ok ? buyJson.data || [] : []);
     } catch {
       toast.error("Failed to load budgets");
     } finally {
@@ -260,7 +268,7 @@ export default function BudgetsPage() {
         </Card>
       </div>
 
-      <FiftyThirtyTwenty income={monthIncome} expenses={monthExpenses} title="This Month vs 50/30/20" />
+      <FiftyThirtyTwenty income={monthIncome} expenses={monthExpenses} purchases={monthPurchases} title="This Month vs 50/30/20" />
 
       {/* Renter quick setup */}
       {missingHousing.length > 0 && (
