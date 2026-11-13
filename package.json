@@ -11,10 +11,10 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
-    "db:migrations": "supabase migration list",
+    "db:migrations": "supabase migration list --remote",
     "db:new": "supabase migration new",
-    "db:push:dry": "supabase db push --dry-run",
-    "db:push": "supabase db push",
+    "db:push:dry": "supabase db push --dry-run --remote",
+    "db:push": "supabase db push --remote",
     "test:e2e:login": "playwright test -c playwright.login.config.ts --headed"
   },
   "dependencies": {
