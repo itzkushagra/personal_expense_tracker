@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Wallet } from "lucide-react";
 
-export function LoginForm() {
+export function LoginForm({ linkError = false }: { linkError?: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +67,12 @@ export function LoginForm() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -77,6 +82,11 @@ export function LoginForm() {
                 required
               />
             </div>
+            {linkError && !error && (
+              <p className="text-sm text-destructive">
+                That email link has expired or was already used. Sign in, or ask for a new password reset link.
+              </p>
+            )}
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}

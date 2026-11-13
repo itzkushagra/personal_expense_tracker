@@ -24,6 +24,7 @@ import {
   Banknote,
   CalendarRange,
   Settings,
+  UserCog,
   PlusCircle,
   TrendingUp,
 } from "lucide-react";
@@ -129,6 +130,13 @@ export function Sidebar() {
           <span className="text-sm text-muted-foreground">Theme</span>
           <ThemeToggle />
         </div>
+        <Link
+          href="/settings#account"
+          className="flex w-full items-center gap-2 rounded-md px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <UserCog className="h-4 w-4" />
+          Account &amp; password
+        </Link>
         <Button
           variant="ghost"
           className="w-full justify-start gap-2 text-muted-foreground"

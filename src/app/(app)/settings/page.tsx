@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AccountSecurity } from "@/components/account-security";
 import { QUICK_ACTIONS } from "@/components/layout/quick-add";
 import { useAccounts } from "@/components/account-select";
 import { type Income, INCOME_TYPE_LABELS } from "@/types";
@@ -115,7 +116,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card id="account" className="scroll-mt-20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base"><User className="h-4 w-4" /> Account</CardTitle>
           </CardHeader>
@@ -132,6 +133,7 @@ export default function SettingsPage() {
               <span className="flex items-center gap-1.5 text-muted-foreground"><Palette className="h-3.5 w-3.5" /> Theme</span>
               <ThemeToggle />
             </div>
+            <AccountSecurity email={email} />
           </CardContent>
         </Card>
 

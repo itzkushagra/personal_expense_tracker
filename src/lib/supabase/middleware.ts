@@ -29,13 +29,15 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthPage =
-    request.nextUrl.pathname === "/login" ||
-    request.nextUrl.pathname === "/signup";
-  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
-  const isKeepAlive = request.nextUrl.pathname === "/api/keep-alive";
+  const path = request.nextUrl.pathname;
+  // Signed-out pages: signed-in visitors are sent to the dashboard instead.
+  const isAuthPage = path === "/login" || path === "/signup" || path === "/forgot-password";
+  const isApiRoute = path.startsWith("/api/");
+  const isKeepAlive = path === "/api/keep-alive";
+  // Links in Supabase emails land here before there's a session; the route signs the user in.
+  const isEmailLink = path === "/auth/callback";
 
-  if (isKeepAlive) {
+  if (isKeepAlive || isEmailLink) {
     return supabaseResponse;
   }
 

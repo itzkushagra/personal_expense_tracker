@@ -20,6 +20,23 @@ test.describe("signed out", () => {
     });
   }
 
+  test("/forgot-password renders, and is reachable from sign in", async ({ page, theme }, testInfo) => {
+    await page.goto("/login");
+    await page.getByRole("link", { name: "Forgot password?" }).click();
+    await expect(page).toHaveURL(/\/forgot-password$/);
+    await expect(page.getByLabel("Email")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send reset link" })).toBeVisible();
+    await expectTheme(page, theme);
+    expect(await hasHorizontalOverflow(page)).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("forgot-password.png"), fullPage: true });
+  });
+
+  test("an expired email link lands on sign in with an explanation", async ({ page }) => {
+    await page.goto("/auth/callback?next=/reset-password");
+    await expect(page).toHaveURL(/\/login\?error=link$/);
+    await expect(page.getByText(/expired or was already used/)).toBeVisible();
+  });
+
   const protectedPages = [
     "/dashboard",
     "/expenses",
@@ -35,6 +52,7 @@ test.describe("signed out", () => {
     "/yearly",
     "/settings",
     "/investments",
+    "/reset-password",
   ];
   for (const path of protectedPages) {
     test(`${path} sends a signed-out visitor to /login`, async ({ page }) => {
