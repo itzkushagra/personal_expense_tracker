@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppZone } from "@/lib/dates";
+import { movesBalanceForInsert, writeErrorMessage } from "@/lib/record-only";
 
 /** First day of the month containing a YYYY-MM-DD date. */
 function monthStart(date: string) {
@@ -46,7 +47,8 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { amount, source, type, date, for_month, is_received, note, account_id } = await request.json();
+  const body = await request.json();
+  const { amount, source, type, date, for_month, is_received, note, account_id } = body;
   if (!(Number(amount) > 0) || !source) {
     return NextResponse.json({ error: "Amount and source are required" }, { status: 400 });
   }
@@ -64,10 +66,11 @@ export async function POST(request: NextRequest) {
       is_received: is_received ?? true,
       account_id: account_id || null,
       note: note || "",
+      ...movesBalanceForInsert(body),
     })
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: writeErrorMessage(error) }, { status: 500 });
   return NextResponse.json({ data }, { status: 201 });
 }

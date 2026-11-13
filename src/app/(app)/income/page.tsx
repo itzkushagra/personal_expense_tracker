@@ -54,6 +54,7 @@ import {
   refreshAccounts,
   useAccounts,
 } from "@/components/account-select";
+import { BalanceEffect, RecordOnlyBadge } from "@/components/balance-effect";
 import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
@@ -111,6 +112,8 @@ export default function IncomePage() {
   const [fForMonthTouched, setFForMonthTouched] = useState(false);
   const [fReceived, setFReceived] = useState(true);
   const [fAccount, setFAccount] = useState<string | null>(null);
+  // false = the money is already in the account's balance; the income is only a record of it.
+  const [fMoves, setFMoves] = useState(true);
   const { defaultId } = useAccounts();
 
   const { month, year } = cursor;
@@ -187,6 +190,7 @@ export default function IncomePage() {
       setFForMonthTouched(true);
       setFReceived(income.is_received);
       setFAccount(income.account_id);
+      setFMoves(income.moves_balance !== false);
     } else {
       const date = isCurrentMonth ? todayStr : `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
       setFType("salary");
@@ -195,6 +199,7 @@ export default function IncomePage() {
       setFForMonthTouched(!isCurrentMonth);
       setFReceived(true);
       setFAccount(newAccountId);
+      setFMoves(true);
     }
     setShowDialog(true);
   }
@@ -247,6 +252,8 @@ export default function IncomePage() {
       is_received: fReceived,
       account_id: fAccount,
       note: fd.get("note") || "",
+      // On an edit, only sent when changed, so edits keep working before the record-only migration.
+      ...(!editing || fMoves !== (editing.moves_balance !== false) ? { moves_balance: fMoves } : {}),
     };
     try {
       const res = await fetch(editing ? `/api/incomes/${editing.id}` : "/api/incomes", {
@@ -355,6 +362,7 @@ export default function IncomePage() {
               {paidLater && !showMonth && ` (for ${monthName(i.for_month)})`}
             </span>
             {i.note && <span className="truncate">· {i.note}</span>}
+            {i.account_id && i.moves_balance === false && <RecordOnlyBadge />}
           </div>
         </div>
         <span className={cn("shrink-0 font-semibold", i.is_received ? "text-green-600" : "text-muted-foreground")}>
@@ -464,6 +472,7 @@ export default function IncomePage() {
             <div className="space-y-2">
               <Label>{fReceived ? "Received in" : "Will arrive in"}</Label>
               <AccountSelect value={fAccount} onChange={setFAccount} placeholder="Not linked to an account" />
+              {fAccount && <BalanceEffect movesBalance={fMoves} onChange={setFMoves} direction="in" />}
             </div>
             <div className="space-y-2">
               <Label htmlFor="inc-note">Note (optional)</Label>

@@ -126,6 +126,8 @@ export interface PersonLoanEntry {
   note: string;
   /** Account the money came into / went out of. */
   account_id: string | null;
+  /** false = record-only: the money was already in the account's balance, so it isn't moved again. Missing before migration 20261113140000. */
+  moves_balance?: boolean;
   created_at: string;
 }
 
@@ -204,6 +206,8 @@ export interface Income {
   is_received: boolean;
   /** Account the money landed in. */
   account_id: string | null;
+  /** false = record-only: the money was already in the account's balance, so it isn't moved again. Missing before migration 20261113140000. */
+  moves_balance?: boolean;
   note: string;
   created_at: string;
   updated_at: string;
@@ -469,6 +473,8 @@ export interface InvestmentTransaction {
   account_id: string | null;
   /** The SIP this buy is an instalment of. */
   sip_id?: string | null;
+  /** false = record-only: the money was already in the account's balance, so it isn't moved again. Missing before migration 20261113140000. */
+  moves_balance?: boolean;
   note: string;
   created_at: string;
   updated_at: string;

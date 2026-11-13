@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppZone } from "@/lib/dates";
+import { movesBalanceForInsert, movesBalanceForUpdate, writeErrorMessage } from "@/lib/record-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type LoanDirection, loanBalance, loanEntryTypes } from "@/types";
 
@@ -36,7 +37,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { kind, amount, date, note, account_id } = await request.json();
+  const body = await request.json();
+  const { kind, amount, date, note, account_id } = body;
   const value = Number(amount);
   if ((kind !== "principal" && kind !== "repayment") || !(value > 0)) {
     return NextResponse.json({ error: "Invalid entry" }, { status: 400 });
@@ -66,24 +68,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       date: date || todayInAppZone(),
       note: note || "",
       account_id: account_id || null,
+      ...movesBalanceForInsert(body),
     })
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: writeErrorMessage(error) }, { status: 500 });
 
   const balance = await syncSettled(supabase, id, user.id);
   return NextResponse.json({ data, balance }, { status: 201 });
 }
 
-/** Body: { entry_id, amount?, date?, note? }. The entry's direction can't change. */
+/** Body: { entry_id, amount?, date?, note?, account_id?, moves_balance? }. The entry's direction can't change. */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { entry_id, amount, date, note, account_id } = await request.json();
+  const body = await request.json();
+  const { entry_id, amount, date, note, account_id } = body;
   if (!entry_id) return NextResponse.json({ error: "entry_id is required" }, { status: 400 });
   if (amount !== undefined && !(Number(amount) > 0)) {
     return NextResponse.json({ error: "Amount must be positive" }, { status: 400 });
@@ -94,6 +98,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (date) update.date = date;
   if (note !== undefined) update.note = note;
   if (account_id !== undefined) update.account_id = account_id || null;
+  Object.assign(update, movesBalanceForUpdate(body));
 
   const { data, error } = await supabase
     .from("held_fund_entries")
@@ -104,7 +109,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: writeErrorMessage(error) }, { status: 500 });
 
   const balance = await syncSettled(supabase, id, user.id);
   return NextResponse.json({ data, balance });

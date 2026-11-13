@@ -212,6 +212,8 @@ export interface TransactionInput {
   account_id: string | null;
   note: string;
   sip_id: string | null;
+  /** false = record-only: the cash was already reflected in the account, so its balance isn't moved. */
+  moves_balance: boolean;
 }
 
 /**
@@ -258,6 +260,7 @@ export function parseTransactionInput(body: Record<string, unknown>): { value: T
       account_id: type === "opening" ? null : account,
       note: typeof body.note === "string" ? body.note.slice(0, 500) : "",
       sip_id: type === "buy" && typeof body.sip_id === "string" && body.sip_id ? body.sip_id : null,
+      moves_balance: type === "opening" || body.moves_balance !== false,
     },
   };
 }
@@ -265,6 +268,8 @@ export function parseTransactionInput(body: Record<string, unknown>): { value: T
 /** Postgres / PostgREST errors meaning a table isn't there yet (migration not applied). */
 export function isMissingTable(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
+  // "column ... does not exist" is a missing column, not a missing table.
+  if (error.code === "42703") return false;
   return error.code === "42P01" || error.code === "PGRST205" || /does not exist|Could not find the table/i.test(error.message ?? "");
 }
 
@@ -406,10 +411,12 @@ export function parseSipInput(
 }
 
 /**
- * The row to insert for a parsed transaction. sip_id is only sent when set, so ordinary buys
- * keep working on a database that doesn't have the SIP column yet.
+ * The row to insert for a parsed transaction. sip_id is only sent when set, and moves_balance
+ * only when false (record-only), so ordinary buys keep working on a database without those columns.
  */
-export function transactionRow(value: TransactionInput): Omit<TransactionInput, "sip_id"> & { sip_id?: string } {
-  const { sip_id, ...rest } = value;
-  return sip_id ? { ...rest, sip_id } : rest;
+export function transactionRow(
+  value: TransactionInput
+): Omit<TransactionInput, "sip_id" | "moves_balance"> & { sip_id?: string; moves_balance?: false } {
+  const { sip_id, moves_balance, ...rest } = value;
+  return { ...rest, ...(sip_id ? { sip_id } : {}), ...(moves_balance ? {} : { moves_balance: false as const }) };
 }

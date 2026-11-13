@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { InvestmentTransaction } from "@/types";
 import { parseTransactionInput, transactionRow, validateTransactions } from "@/lib/portfolio";
+import { writeErrorMessage } from "@/lib/record-only";
 
 /** Record a buy, a sale, or units you already own ("opening") on one of your holdings. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (error.code === "23505" && parsed.value.sip_id) {
       return NextResponse.json({ error: "This SIP is already logged for that month" }, { status: 409 });
     }
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: writeErrorMessage(error) }, { status: 400 });
   }
   return NextResponse.json({ data }, { status: 201 });
 }

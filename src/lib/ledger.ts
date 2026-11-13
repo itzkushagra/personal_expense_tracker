@@ -32,7 +32,7 @@ export async function fetchAll<T>(
     const { data, error } = await build(from, from + 999);
     // optional: a table added by a migration that hasn't been applied yet counts as empty.
     if (error && optional && isMissingTable(error)) return [];
-    if (error) throw new Error(error.message);
+    if (error) throw Object.assign(new Error(error.message), { code: error.code });
     const page = (data as T[] | null) || [];
     rows.push(...page);
     if (page.length < 1000) return rows;
@@ -116,6 +116,31 @@ export function investmentFlows(rows: InvestmentTxnRow[]): Flow[] {
     });
 }
 
+/** Postgres "undefined column": a column added by a migration that hasn't been applied yet. */
+export const isMissingColumn = (e: unknown) => {
+  const code = (e as { code?: string } | null)?.code;
+  return code === "42703" || code === "PGRST204";
+};
+
+/**
+ * Rows that can be marked record-only (moves_balance = false): the money is already part of the
+ * account's balance, so the entry names the account but doesn't move it. Before the
+ * record-only migration the column doesn't exist, and every row moves the balance.
+ */
+async function fetchMovingRows<T>(
+  columns: string,
+  build: (columns: string, from: number, to: number) => PromiseLike<{ data: unknown; error: QueryError }>,
+  options?: { optional?: boolean }
+): Promise<T[]> {
+  try {
+    const rows = await fetchAll<T & { moves_balance?: boolean }>((f, t) => build(`${columns}, moves_balance`, f, t), options);
+    return rows.filter((r) => r.moves_balance !== false);
+  } catch (e) {
+    if (!isMissingColumn(e)) throw e;
+    return fetchAll<T>((f, t) => build(columns, f, t), options);
+  }
+}
+
 /** All linked money movements for the user, optionally for a single account. */
 async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: string): Promise<Flow[]> {
   const linked = (table: string, columns: string, accountColumn: string) => {
@@ -130,11 +155,11 @@ async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: s
         .eq("reimbursement_status", "reimbursed")
         .range(f, t)
     ),
-    fetchAll<IncomeRow>((f, t) =>
-      linked("incomes", "id, date, amount, source, type, account_id", "account_id").eq("is_received", true).range(f, t)
+    fetchMovingRows<IncomeRow>("id, date, amount, source, type, account_id", (cols, f, t) =>
+      linked("incomes", cols, "account_id").eq("is_received", true).range(f, t)
     ),
-    fetchAll<LoanEntryRow>((f, t) =>
-      linked("held_fund_entries", "id, date, amount, type, note, account_id, loan:held_funds(person_name, direction)", "account_id").range(f, t)
+    fetchMovingRows<LoanEntryRow>("id, date, amount, type, note, account_id, loan:held_funds(person_name, direction)", (cols, f, t) =>
+      linked("held_fund_entries", cols, "account_id").range(f, t)
     ),
     fetchAll<TransferRow>((f, t) => {
       let q = supabase.from("transfers").select("id, date, amount, note, from_account_id, to_account_id").eq("user_id", userId);
@@ -150,11 +175,9 @@ async function loadFlows(supabase: SupabaseClient, userId: string, accountId?: s
     fetchAll<AdjustmentRow>((f, t) => linked("account_adjustments", "id, date, amount, note, account_id", "account_id").range(f, t), {
       optional: true,
     }),
-    fetchAll<InvestmentTxnRow>(
-      (f, t) =>
-        linked("investment_transactions", "id, date, type, quantity, price, fees, note, account_id, holding:investment_holdings(name)", "account_id")
-          .in("type", ["buy", "sell"])
-          .range(f, t),
+    fetchMovingRows<InvestmentTxnRow>(
+      "id, date, type, quantity, price, fees, note, account_id, holding:investment_holdings(name)",
+      (cols, f, t) => linked("investment_transactions", cols, "account_id").in("type", ["buy", "sell"]).range(f, t),
       { optional: true }
     ),
   ]);

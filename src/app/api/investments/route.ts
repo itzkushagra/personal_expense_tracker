@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppZone } from "@/lib/dates";
 import { loadPortfolio } from "@/lib/investments";
+import { writeErrorMessage } from "@/lib/record-only";
 import { isMissingTable, parseHoldingInput, parseSipInput, parseTransactionInput, transactionRow } from "@/lib/portfolio";
 
 const NOT_SET_UP = "Portfolio tracking needs the 20261110200100_investment_portfolio migration applied first";
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
     if (txError) {
       // Don't leave an empty holding behind when its first transaction was refused.
       await supabase.from("investment_holdings").delete().eq("id", data.id).eq("user_id", user.id);
-      return NextResponse.json({ error: txError.message }, { status: 400 });
+      return NextResponse.json({ error: writeErrorMessage(txError) }, { status: 400 });
     }
   }
 

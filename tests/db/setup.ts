@@ -18,6 +18,7 @@ export const MIGRATIONS = [
   "supabase/migrations/20261110200000_account_balance_adjustments.sql",
   "supabase/migrations/20261110200100_investment_portfolio.sql",
   "supabase/migrations/20261113120000_investment_sips.sql",
+  "supabase/migrations/20261113140000_record_only_entries.sql",
 ];
 
 /**

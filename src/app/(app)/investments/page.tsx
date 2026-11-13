@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ChevronDown, ChevronUp, Info, Loader2, Pencil, Plus, Tag, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
+import { BalanceEffect, RecordOnlyBadge } from "@/components/balance-effect";
 import { PortfolioSummaryCards } from "@/components/investments/portfolio-summary";
 import { SipSection } from "@/components/investments/sip-section";
 import { cashAmount } from "@/lib/portfolio";
@@ -62,6 +63,8 @@ export default function InvestmentsPage() {
   const { defaultId } = useAccounts();
   const [cashAccount, setCashAccount] = useState<string | null | undefined>(undefined);
   const cashAccountId = cashAccount === undefined ? defaultId : cashAccount;
+  // false = the cash movement is already reflected in the account; the buy/sale is only a record.
+  const [cashMoves, setCashMoves] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
@@ -89,6 +92,7 @@ export default function InvestmentsPage() {
     setWithSip(false);
     setSipAccount(null);
     setCashAccount(undefined);
+    setCashMoves(true);
     setHoldingDialog({ editing });
   }
 
@@ -127,6 +131,7 @@ export default function InvestmentsPage() {
         price: fd.get("price"),
         fees: fd.get("fees") || 0,
         account_id: firstKind === "buy" ? cashAccountId : null,
+        moves_balance: cashMoves,
       };
     }
     setSaving(true);
@@ -155,6 +160,7 @@ export default function InvestmentsPage() {
         price: fd.get("price"),
         fees: fd.get("fees") || 0,
         account_id: cashAccountId,
+        moves_balance: cashMoves,
         note: fd.get("note") || "",
       });
       setTxnDialog(null);
@@ -332,8 +338,8 @@ export default function InvestmentsPage() {
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => { setCashAccount(undefined); setEntryMode("amount"); setTxnDialog({ holding: h, type: "buy" }); }}>Buy</Button>
-                          <Button size="sm" variant="outline" disabled={s.quantity <= 0} onClick={() => { setCashAccount(undefined); setTxnDialog({ holding: h, type: "sell" }); }}>Sell</Button>
+                          <Button size="sm" variant="outline" onClick={() => { setCashAccount(undefined); setCashMoves(true); setEntryMode("amount"); setTxnDialog({ holding: h, type: "buy" }); }}>Buy</Button>
+                          <Button size="sm" variant="outline" disabled={s.quantity <= 0} onClick={() => { setCashAccount(undefined); setCashMoves(true); setTxnDialog({ holding: h, type: "sell" }); }}>Sell</Button>
                           <Button size="sm" variant="outline" onClick={() => setPriceDialog(h)}>
                             <Tag className="mr-1 h-3.5 w-3.5" /> Update value
                           </Button>
@@ -372,6 +378,7 @@ export default function InvestmentsPage() {
                                     <td className="py-1.5 text-right">{formatPrice(Number(t.price))}</td>
                                     <td className="py-1.5 text-right">
                                       {t.type === "opening" ? "—" : `${t.type === "sell" ? "+" : "−"}${formatCurrency(cashAmount(t))}`}
+                                      {t.account_id && t.moves_balance === false && <RecordOnlyBadge className="ml-1" />}
                                     </td>
                                     <td className="py-1.5 text-right">
                                       <Button size="icon" variant="ghost" className="h-7 w-7" aria-label="Delete transaction" onClick={() => deleteTxn(h, t.id)}>
@@ -460,6 +467,7 @@ export default function InvestmentsPage() {
                     <div className="space-y-2">
                       <Label>Paid from</Label>
                       <AccountSelect value={cashAccountId} onChange={setCashAccount} placeholder="Not tracked" className="w-full" />
+                      {cashAccountId && <BalanceEffect movesBalance={cashMoves} onChange={setCashMoves} direction="out" />}
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">No cash moves: use this for units bought earlier, including ones logged as an &quot;Investments&quot; expense.</p>
@@ -533,6 +541,9 @@ export default function InvestmentsPage() {
               <div className="space-y-2">
                 <Label>{txnDialog.type === "sell" ? "Paid into" : "Paid from"}</Label>
                 <AccountSelect value={cashAccountId} onChange={setCashAccount} placeholder="Not tracked" className="w-full" />
+                {cashAccountId && (
+                  <BalanceEffect movesBalance={cashMoves} onChange={setCashMoves} direction={txnDialog.type === "sell" ? "in" : "out"} />
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="txn-note">Note (optional)</Label>

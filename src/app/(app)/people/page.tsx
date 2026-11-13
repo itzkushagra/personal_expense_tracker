@@ -46,6 +46,7 @@ import {
 } from "@/types";
 import { cn, formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
+import { BalanceEffect, RecordOnlyBadge } from "@/components/balance-effect";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
 
@@ -88,7 +89,20 @@ export default function PeopleLoansPage() {
   const [entryNote, setEntryNote] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showSettled, setShowSettled] = useState(false);
-  const [editEntry, setEditEntry] = useState<{ loanId: string; id: string; amount: string; date: string; note: string; account_id: string | null } | null>(null);
+  const [editEntry, setEditEntry] = useState<{
+    loanId: string;
+    id: string;
+    type: "in" | "out";
+    amount: string;
+    date: string;
+    note: string;
+    account_id: string | null;
+    moves_balance: boolean;
+    was_moving: boolean;
+  } | null>(null);
+  // false = the money is already in the account's balance; the entry is only a record of it.
+  const [newMoves, setNewMoves] = useState(true);
+  const [entryMoves, setEntryMoves] = useState(true);
   const { defaultId } = useAccounts();
   const [newAccount, setNewAccount] = useState<string | null | undefined>(undefined);
   const [entryAccount, setEntryAccount] = useState<string | null | undefined>(undefined);
@@ -161,6 +175,7 @@ export default function PeopleLoansPage() {
               ...base,
               direction: newDirection,
               account_id: newAccountId,
+              moves_balance: newMoves,
               amount: parseFloat(fd.get("amount") as string),
               date: fd.get("date") || toLocalDateString(),
             }),
@@ -169,6 +184,7 @@ export default function PeopleLoansPage() {
       toast.success(editing ? "Updated" : `Saved: ${LOAN_DIRECTION_LABELS[newDirection].toLowerCase()} (${base.person_name})`);
       setShowDialog(false);
       setEditing(null);
+      setNewMoves(true);
       refreshAll();
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
@@ -187,7 +203,7 @@ export default function PeopleLoansPage() {
       const res = await fetch(`/api/people-loans/${entryFor.id}/entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: entryFor.kind, amount, date: toLocalDateString(), note: entryNote, account_id: entryAccountId }),
+        body: JSON.stringify({ kind: entryFor.kind, amount, date: toLocalDateString(), note: entryNote, account_id: entryAccountId, moves_balance: entryMoves }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
@@ -200,6 +216,7 @@ export default function PeopleLoansPage() {
       setEntryFor(null);
       setEntryAmount("");
       setEntryNote("");
+      setEntryMoves(true);
       refreshAll();
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
@@ -214,7 +231,15 @@ export default function PeopleLoansPage() {
       const res = await fetch(`/api/people-loans/${editEntry.loanId}/entries`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entry_id: editEntry.id, amount, date: editEntry.date, note: editEntry.note, account_id: editEntry.account_id }),
+        body: JSON.stringify({
+          entry_id: editEntry.id,
+          amount,
+          date: editEntry.date,
+          note: editEntry.note,
+          account_id: editEntry.account_id,
+          // Only sent when changed, so edits keep working before the record-only migration.
+          ...(editEntry.moves_balance !== editEntry.was_moving ? { moves_balance: editEntry.moves_balance } : {}),
+        }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error);
       toast.success("Entry updated");
@@ -330,6 +355,13 @@ export default function PeopleLoansPage() {
                     : "Money went out of"}
                 </p>
                 <AccountSelect value={entryAccountId} onChange={setEntryAccount} className="h-8 w-full" />
+                {entryAccountId && (
+                  <BalanceEffect
+                    movesBalance={entryMoves}
+                    onChange={setEntryMoves}
+                    direction={entryFor.kind === "repayment" ? loanEntryTypes(loan.direction).repayment : loanEntryTypes(loan.direction).principal}
+                  />
+                )}
               </div>
               <div className="flex gap-2">
                 <Button size="sm" className="h-8 flex-1" onClick={handleEntry}>Save</Button>
@@ -369,6 +401,13 @@ export default function PeopleLoansPage() {
                   </div>
                   <Input className="h-8" placeholder="Note" value={editEntry.note} onChange={(e) => setEditEntry({ ...editEntry, note: e.target.value })} />
                   <AccountSelect value={editEntry.account_id} onChange={(id) => setEditEntry({ ...editEntry, account_id: id })} className="h-8 w-full" />
+                  {editEntry.account_id && (
+                    <BalanceEffect
+                      movesBalance={editEntry.moves_balance}
+                      onChange={(moves) => setEditEntry({ ...editEntry, moves_balance: moves })}
+                      direction={editEntry.type}
+                    />
+                  )}
                   <div className="flex gap-2">
                     <Button size="sm" className="h-7 flex-1" onClick={handleUpdateEntry}>Save</Button>
                     <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditEntry(null)}>Cancel</Button>
@@ -385,12 +424,25 @@ export default function PeopleLoansPage() {
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                     {entry.type === "in" ? "to you" : "from you"}{entry.note && ` · ${entry.note}`}
                   </span>
+                  {entry.account_id && entry.moves_balance === false && <RecordOnlyBadge />}
                   <span className={entry.type === "in" ? "text-blue-600" : "text-orange-600"}>
                     {entry.type === "in" ? "+" : "−"}{formatCurrency(Number(entry.amount))}
                   </span>
                   <button
                     className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setEditEntry({ loanId: loan.id, id: entry.id, amount: String(entry.amount), date: entry.date, note: entry.note, account_id: entry.account_id })}
+                    onClick={() =>
+                      setEditEntry({
+                        loanId: loan.id,
+                        id: entry.id,
+                        type: entry.type,
+                        amount: String(entry.amount),
+                        date: entry.date,
+                        note: entry.note,
+                        account_id: entry.account_id,
+                        moves_balance: entry.moves_balance !== false,
+                        was_moving: entry.moves_balance !== false,
+                      })
+                    }
                     aria-label="Edit entry"
                   >
                     <Pencil className="h-3 w-3" />
@@ -480,6 +532,9 @@ export default function PeopleLoansPage() {
                 <div className="space-y-2">
                   <Label>{loanEntryTypes(newDirection).principal === "in" ? "Money came into" : "Money went out of"}</Label>
                   <AccountSelect value={newAccountId} onChange={setNewAccount} placeholder="Not linked to an account" />
+                  {newAccountId && (
+                    <BalanceEffect movesBalance={newMoves} onChange={setNewMoves} direction={loanEntryTypes(newDirection).principal} />
+                  )}
                 </div>
               )}
               <div className="space-y-2">
