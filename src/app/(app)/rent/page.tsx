@@ -185,25 +185,62 @@ export default function RentPage() {
       });
       if (!res.ok) throw new Error();
       refreshAccounts();
-
-      // Keep the Bills reminder in step: mark this month's rent bill paid (expense already added above).
-      const monthEnd = toLocalDateString(new Date(year, month, 0));
-      if (isRent && rentBill && rentBill.next_due_date <= monthEnd) {
-        await fetch(`/api/bills/${rentBill.id}/payments`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount_paid: Number(rental.monthly_rent),
-            paid_date: toLocalDateString(),
-            status: rentBill.next_due_date < toLocalDateString() ? "late" : "paid",
-            create_expense: false,
-          }),
-        });
-      }
+      if (isRent) await markRentBillPaid(Number(rental.monthly_rent));
       toast.success(`${isRent ? "Rent" : "Maintenance"} for ${monthLabel} logged`);
       fetchData();
     } catch {
       toast.error("Failed to log payment");
+    } finally {
+      setLogging(null);
+    }
+  }
+
+  /** Keep the Bills reminder in step: mark this month's rent bill paid (the expense is already added). */
+  async function markRentBillPaid(amount: number) {
+    const monthEnd = toLocalDateString(new Date(year, month, 0));
+    if (!rentBill || rentBill.next_due_date > monthEnd) return;
+    await fetch(`/api/bills/${rentBill.id}/payments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount_paid: amount,
+        paid_date: toLocalDateString(),
+        status: rentBill.next_due_date < toLocalDateString() ? "late" : "paid",
+        create_expense: false,
+      }),
+    });
+  }
+
+  /**
+   * Notice period: the landlord keeps this month's rent out of the security deposit. It's logged as
+   * Rent spending with no bank account, and the deposit owed back goes down by the same amount.
+   */
+  async function payFromDeposit() {
+    if (!rental) return;
+    const left = Number(rental.deposit_left ?? rental.security_deposit);
+    const rent = Number(rental.monthly_rent);
+    const amount = Math.min(rent, left);
+    const shortfall = rent - amount;
+    if (!confirm(
+      `Use ${formatCurrency(amount)} of your security deposit for ${monthLabel} rent? No money leaves your bank; ` +
+      `the deposit owed back drops from ${formatCurrency(left)} to ${formatCurrency(left - amount)}.` +
+      (shortfall > 0 ? ` The other ${formatCurrency(shortfall)} still has to be paid from your bank.` : "")
+    )) return;
+    setLogging("deposit");
+    try {
+      const res = await fetch("/api/rental/deposit-rent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: toLocalDateString(), description: `Flat rent - ${monthLabel} (from security deposit)` }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Couldn't use the deposit");
+      await markRentBillPaid(Number(json.data?.amount ?? amount));
+      toast.success(`${monthLabel} rent paid from the deposit · ${formatCurrency(Number(json.deposit_left ?? 0))} left`);
+      fetchData();
+      fetch("/api/net-worth", { method: "POST" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't use the deposit");
     } finally {
       setLogging(null);
     }
@@ -214,7 +251,7 @@ export default function RentPage() {
    * reverses the matching payment on the Bills rent reminder so the reminder is due again.
    */
   async function undoLogged(expense: Expense, kind: "rent" | "maintenance") {
-    if (!confirm(`Undo ${formatCurrency(Number(expense.amount))} ${kind} logged on ${formatDate(expense.date)}? The expense is deleted${kind === "rent" && rentBill ? " and the rent reminder in Bills is marked unpaid again" : ""}.`)) return;
+    if (!confirm(`Undo ${formatCurrency(Number(expense.amount))} ${kind} logged on ${formatDate(expense.date)}? The expense is deleted${kind === "rent" && rentBill ? " and the rent reminder in Bills is marked unpaid again" : ""}${expense.paid_from_deposit ? ", and the amount goes back on your security deposit" : ""}.`)) return;
     setUndoing(expense.id);
     try {
       const res = await fetch(`/api/expenses/${expense.id}`, { method: "DELETE" });
@@ -235,6 +272,7 @@ export default function RentPage() {
       toast.success(`${kind === "rent" ? "Rent" : "Maintenance"} log undone`);
       refreshAccounts();
       fetchData();
+      if (expense.paid_from_deposit) fetch("/api/net-worth", { method: "POST" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't undo");
     } finally {
@@ -308,6 +346,7 @@ export default function RentPage() {
     : 0;
 
   const hasRentBill = !!rentBill;
+  const depositLeftNow = rental ? Number(rental.deposit_left ?? rental.security_deposit) : 0;
 
   // Last 12 months of rent, newest first, for the payment history strip.
   const history = Array.from({ length: 12 }, (_, i) => {
@@ -493,8 +532,12 @@ export default function RentPage() {
             <KeyRound className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(Number(rental.security_deposit))}</div>
-            <p className="text-xs text-muted-foreground">refundable, counted in net worth</p>
+            <div className="text-2xl font-bold">{formatCurrency(depositLeftNow)}</div>
+            <p className="text-xs text-muted-foreground">
+              {Number(rental.deposit_used || 0) > 0
+                ? `left of ${formatCurrency(Number(rental.security_deposit))} · ${formatCurrency(Number(rental.deposit_used))} used for rent`
+                : "refundable, counted in net worth"}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -527,10 +570,18 @@ export default function RentPage() {
                   {isRentPaid ? "Already logged for this month" : `Pay to ${rental.landlord_name || "landlord"}${rental.landlord_contact ? ` · ${rental.landlord_contact}` : ""}`}
                 </p>
               </div>
-              <Button size="sm" variant={isRentPaid ? "outline" : "default"} disabled={isRentPaid || logging !== null} onClick={() => logPayment("rent")}>
-                {logging === "rent" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Receipt className="mr-1 h-3 w-3" />}
-                {isRentPaid ? "Logged" : "Log as paid"}
-              </Button>
+              <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row">
+                <Button size="sm" variant={isRentPaid ? "outline" : "default"} disabled={isRentPaid || logging !== null} onClick={() => logPayment("rent")}>
+                  {logging === "rent" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Receipt className="mr-1 h-3 w-3" />}
+                  {isRentPaid ? "Logged" : "Log as paid"}
+                </Button>
+                {!isRentPaid && depositLeftNow > 0 && (
+                  <Button size="sm" variant="outline" disabled={logging !== null} onClick={payFromDeposit} title="Notice period: the landlord keeps this month's rent from your deposit">
+                    {logging === "deposit" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <KeyRound className="mr-1 h-3 w-3" />}
+                    Pay from deposit
+                  </Button>
+                )}
+              </div>
             </div>
             <LoggedRows
               items={rentExpenses.filter((e) => e.date.startsWith(monthPrefix))}
@@ -693,7 +744,7 @@ function LoggedRows({
         <li key={e.id} className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate">
             {formatCurrency(Number(e.amount))} on {formatDate(e.date)} from{" "}
-            <span className="font-medium text-foreground">{accountName(e.account_id) ?? "no account"}</span>
+            <span className="font-medium text-foreground">{e.paid_from_deposit ? "security deposit" : accountName(e.account_id) ?? "no account"}</span>
           </span>
           <span className="flex shrink-0 gap-1">
             <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => onEdit(e)}>

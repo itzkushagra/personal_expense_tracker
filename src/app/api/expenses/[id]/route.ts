@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { depositLeft, depositUsed } from "@/lib/deposit";
 
 export async function GET(
   _request: NextRequest,
@@ -55,6 +56,21 @@ export async function PUT(
     updated_at: new Date().toISOString(),
   };
   if (account_id !== undefined) update.account_id = account_id || null;
+
+  // Rent paid out of the security deposit: giving it a bank account means it was paid from the
+  // bank after all; raising its amount can't use more deposit than is left.
+  const { data: existing } = await supabase.from("expenses").select("*").eq("id", id).eq("user_id", user.id).maybeSingle();
+  if (existing?.paid_from_deposit) {
+    if (update.account_id) {
+      update.paid_from_deposit = false;
+    } else if (amount !== undefined && Number(amount) > Number(existing.amount)) {
+      const { data: rental } = await supabase.from("rentals").select("security_deposit").eq("user_id", user.id).maybeSingle();
+      const left = depositLeft(Number(rental?.security_deposit || 0), await depositUsed(supabase, user.id));
+      if (Number(amount) - Number(existing.amount) > left + 0.005) {
+        return NextResponse.json({ error: `Only ₹${left.toLocaleString("en-IN")} of the deposit is left` }, { status: 400 });
+      }
+    }
+  }
 
   if (is_reimbursable !== undefined) {
     const { data: current } = await supabase

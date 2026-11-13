@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { pick, WRITABLE } from "@/lib/api-fields";
+import { depositLeft, depositUsed } from "@/lib/deposit";
 
 export async function GET() {
   const supabase = await createClient();
@@ -14,7 +15,10 @@ export async function GET() {
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data });
+  if (!data) return NextResponse.json({ data });
+  // Rent paid out of the deposit during a notice period comes off what's owed back.
+  const used = await depositUsed(supabase, user.id);
+  return NextResponse.json({ data: { ...data, deposit_used: used, deposit_left: depositLeft(Number(data.security_deposit), used) } });
 }
 
 export async function PUT(request: NextRequest) {

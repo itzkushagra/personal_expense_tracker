@@ -1,3 +1,4 @@
+import { depositLeft, depositUsed } from "@/lib/deposit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { type Account, type Debt, type LoanDirection, loanBalance, reimbursementDue } from "@/types";
 import { withLiveBalances } from "@/lib/ledger";
@@ -104,8 +105,9 @@ export async function computeNetWorth(supabase: SupabaseClient, userId: string):
     totalAssets += investments;
   }
 
-  // Refundable rent deposit and pending company claims are money owed to you.
-  const deposit = Number(rental?.security_deposit || 0);
+  // Refundable rent deposit and pending company claims are money owed to you. Rent already
+  // paid out of the deposit (notice period) is no longer owed back.
+  const deposit = rental ? depositLeft(Number(rental.security_deposit || 0), await depositUsed(supabase, userId)) : 0;
   if (deposit > 0) {
     breakdown["Rent security deposit"] = deposit;
     totalAssets += deposit;

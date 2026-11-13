@@ -17,6 +17,8 @@ export interface Expense {
   /** Account the reimbursement was paid into. */
   reimbursed_account_id: string | null;
   claim_reference: string;
+  /** Rent kept by the landlord out of the security deposit: spending, but no bank account. */
+  paid_from_deposit?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -101,6 +103,9 @@ export interface Rental {
   notice_period_days: number;
   created_at: string;
   updated_at: string;
+  /** Rent paid out of the deposit so far, and what's still owed back (from GET /api/rental). */
+  deposit_used?: number;
+  deposit_left?: number;
 }
 
 // --- People & Loans (money between you and friends/family) ---
