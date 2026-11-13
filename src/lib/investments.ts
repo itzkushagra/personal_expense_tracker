@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { InvestmentHolding, InvestmentTransaction } from "@/types";
+import type { InvestmentHolding, InvestmentSip, InvestmentTransaction } from "@/types";
 import { fetchAll } from "@/lib/ledger";
+import { todayInAppZone } from "@/lib/dates";
 import {
   type HoldingSummary,
   type PortfolioSummary,
+  type SipStatus,
   isMissingTable,
+  sipStatus,
   summarizeHolding,
   summarizePortfolio,
 } from "@/lib/portfolio";
@@ -14,10 +17,18 @@ export interface HoldingWithSummary extends InvestmentHolding {
   summary: HoldingSummary;
 }
 
+export interface SipWithStatus extends InvestmentSip {
+  holding_name: string;
+  status: SipStatus;
+}
+
 export interface PortfolioData {
   /** False until the investment_portfolio migration has been applied. */
   available: boolean;
+  /** False until the investment_sips migration (SIPs, fund categories) has been applied. */
+  sips_available: boolean;
   holdings: HoldingWithSummary[];
+  sips: SipWithStatus[];
   summary: PortfolioSummary;
   /**
    * "Investments" expenses recorded before portfolio tracking. Their cash already left your
@@ -33,10 +44,11 @@ const EMPTY_SUMMARY: PortfolioSummary = {
   unrealized_pct: null,
   realized_gain: 0,
   allocation: [],
+  by_fund_category: [],
   holding_count: 0,
 };
 
-/** Every holding with its transactions and figures, plus the portfolio totals. */
+/** Every holding with its transactions and figures, SIPs with this month's status, and totals. */
 export async function loadPortfolio(
   supabase: SupabaseClient,
   userId: string,
@@ -50,13 +62,21 @@ export async function loadPortfolio(
 
   const legacy = includeLegacy ? await legacyInvestmentExpenses(supabase, userId) : { count: 0, total: 0 };
   if (error) {
-    if (isMissingTable(error)) return { available: false, holdings: [], summary: EMPTY_SUMMARY, legacy };
+    if (isMissingTable(error)) {
+      return { available: false, sips_available: false, holdings: [], sips: [], summary: EMPTY_SUMMARY, legacy };
+    }
     throw new Error(error.message);
   }
 
-  const txns = await fetchAll<InvestmentTransaction>((f, t) =>
-    supabase.from("investment_transactions").select("*").eq("user_id", userId).order("date").order("created_at").range(f, t)
-  );
+  const [txns, sipRows] = await Promise.all([
+    fetchAll<InvestmentTransaction>((f, t) =>
+      supabase.from("investment_transactions").select("*").eq("user_id", userId).order("date").order("created_at").range(f, t)
+    ),
+    supabase.from("investment_sips").select("*").eq("user_id", userId).order("day_of_month"),
+  ]);
+  const sipsAvailable = !isMissingTable(sipRows.error);
+  if (sipRows.error && sipsAvailable) throw new Error(sipRows.error.message);
+
   const byHolding = new Map<string, InvestmentTransaction[]>();
   for (const t of txns) {
     const list = byHolding.get(t.holding_id) ?? [];
@@ -66,10 +86,25 @@ export async function loadPortfolio(
 
   const rows: HoldingWithSummary[] = ((holdings || []) as InvestmentHolding[]).map((h) => {
     const list = byHolding.get(h.id) ?? [];
-    return { ...h, transactions: list, summary: summarizeHolding(h, list) };
+    return { ...h, fund_category: h.fund_category ?? "", transactions: list, summary: summarizeHolding(h, list) };
   });
 
-  return { available: true, holdings: rows, summary: summarizePortfolio(rows), legacy };
+  const today = todayInAppZone();
+  const names = new Map(rows.map((h) => [h.id, h.name]));
+  const sips: SipWithStatus[] = ((sipsAvailable ? sipRows.data : []) as InvestmentSip[] | null ?? []).map((s) => ({
+    ...s,
+    holding_name: names.get(s.holding_id) ?? "",
+    status: sipStatus(s, byHolding.get(s.holding_id) ?? [], today),
+  }));
+
+  return {
+    available: true,
+    sips_available: sipsAvailable,
+    holdings: rows,
+    sips,
+    summary: summarizePortfolio(rows),
+    legacy,
+  };
 }
 
 async function legacyInvestmentExpenses(supabase: SupabaseClient, userId: string) {

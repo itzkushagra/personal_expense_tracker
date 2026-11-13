@@ -54,7 +54,8 @@ test.describe("signed out", () => {
       await page.getByLabel("Email").fill("no-such-user@example.invalid");
       await page.getByLabel("Password").fill("not-a-real-password");
       await page.getByRole("button", { name: "Sign in" }).click();
-      await expect(page.locator("p.text-destructive")).toBeVisible();
+      // A real request to Supabase auth: allow for a slow first response on a cold start.
+    await expect(page.locator("p.text-destructive")).toBeVisible({ timeout: 20_000 });
       await expect(page).toHaveURL(/\/login$/);
     });
   });

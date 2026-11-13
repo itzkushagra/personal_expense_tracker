@@ -16,6 +16,7 @@ const base: PortfolioSummary = {
     { asset_type: "mutual_fund", value: 90000, pct: 80 },
     { asset_type: "gold", value: 22500, pct: 20 },
   ],
+  by_fund_category: [],
   holding_count: 2,
 };
 

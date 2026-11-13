@@ -12,11 +12,14 @@ import { ChevronDown, ChevronUp, Info, Loader2, Pencil, Plus, Tag, Trash2, Trend
 import { toast } from "sonner";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
 import { PortfolioSummaryCards } from "@/components/investments/portfolio-summary";
+import { SipSection } from "@/components/investments/sip-section";
 import { cashAmount } from "@/lib/portfolio";
 import type { HoldingWithSummary, PortfolioData } from "@/lib/investments";
-import { cn, formatCurrency, formatDate, toLocalDateString } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, formatPrice, toLocalDateString } from "@/lib/utils";
 import { startLoad } from "@/lib/load";
 import {
+  FUND_CATEGORY_LABELS,
+  type FundCategory,
   INVESTMENT_ASSET_COLORS,
   INVESTMENT_ASSET_LABELS,
   type InvestmentAssetType,
@@ -24,6 +27,8 @@ import {
 } from "@/types";
 
 const ASSET_TYPES = Object.keys(INVESTMENT_ASSET_LABELS) as InvestmentAssetType[];
+const FUND_CATEGORIES = Object.keys(FUND_CATEGORY_LABELS) as Exclude<FundCategory, "">[];
+const NO_CATEGORY = "none";
 const TXN_LABELS: Record<InvestmentTransactionType, string> = { buy: "Buy", sell: "Sell", opening: "Already owned" };
 const qty = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 4 });
 
@@ -48,6 +53,10 @@ export default function InvestmentsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [holdingDialog, setHoldingDialog] = useState<{ editing: HoldingWithSummary | null } | null>(null);
   const [firstKind, setFirstKind] = useState<"buy" | "opening">("buy");
+  // Buys can be entered as an amount + NAV (how SIPs and lump sums work) or as units + price.
+  const [entryMode, setEntryMode] = useState<"amount" | "units">("amount");
+  const [withSip, setWithSip] = useState(false);
+  const [sipAccount, setSipAccount] = useState<string | null>(null);
   const [txnDialog, setTxnDialog] = useState<TxnDialog>(null);
   const [priceDialog, setPriceDialog] = useState<HoldingWithSummary | null>(null);
   const { defaultId } = useAccounts();
@@ -76,6 +85,9 @@ export default function InvestmentsPage() {
 
   function openHolding(editing: HoldingWithSummary | null) {
     setFirstKind("buy");
+    setEntryMode("amount");
+    setWithSip(false);
+    setSipAccount(null);
     setCashAccount(undefined);
     setHoldingDialog({ editing });
   }
@@ -90,15 +102,28 @@ export default function InvestmentsPage() {
       symbol: fd.get("symbol") || "",
       note: fd.get("note") || "",
     };
-    if (!editing && fd.get("quantity")) {
+    if (data?.sips_available) {
+      const cat = fd.get("fund_category") as string | null;
+      body.fund_category = cat && cat !== NO_CATEGORY ? cat : "";
+    }
+    if (!editing && withSip) {
+      body.sip = {
+        amount: fd.get("sip_amount"),
+        day_of_month: Number(fd.get("sip_day")),
+        start_date: fd.get("sip_start"),
+        account_id: sipAccount ?? cashAccountId,
+      };
+    }
+    const firstMode = firstKind === "buy" ? entryMode : "units";
+    if (!editing && (fd.get("quantity") || fd.get("amount"))) {
       if (!fd.get("price")) {
-        toast.error("Enter the price per unit too");
+        toast.error(firstMode === "amount" ? "Enter the NAV / price to work out the units" : "Enter the price per unit too");
         return;
       }
       body.first_transaction = {
         type: firstKind,
         date: fd.get("date"),
-        quantity: fd.get("quantity"),
+        ...(firstMode === "amount" ? { amount: fd.get("amount") } : { quantity: fd.get("quantity") }),
         price: fd.get("price"),
         fees: fd.get("fees") || 0,
         account_id: firstKind === "buy" ? cashAccountId : null,
@@ -106,7 +131,8 @@ export default function InvestmentsPage() {
     }
     setSaving(true);
     try {
-      await send(editing ? `/api/investments/${editing.id}` : "/api/investments", editing ? "PUT" : "POST", body);
+      const json = await send(editing ? `/api/investments/${editing.id}` : "/api/investments", editing ? "PUT" : "POST", body);
+      if (json.warning) toast.warning(json.warning);
       setHoldingDialog(null);
       await afterChange(editing ? "Holding updated" : "Holding added");
     } catch (err) {
@@ -125,7 +151,7 @@ export default function InvestmentsPage() {
       await send(`/api/investments/${txnDialog.holding.id}/transactions`, "POST", {
         type: txnDialog.type,
         date: fd.get("date"),
-        quantity: fd.get("quantity"),
+        ...(txnDialog.type === "buy" && entryMode === "amount" ? { amount: fd.get("amount") } : { quantity: fd.get("quantity") }),
         price: fd.get("price"),
         fees: fd.get("fees") || 0,
         account_id: cashAccountId,
@@ -246,6 +272,21 @@ export default function InvestmentsPage() {
         <>
           <PortfolioSummaryCards summary={data.summary} />
 
+          {data.sips_available ? (
+            <SipSection sips={data.sips} holdings={holdings} onChanged={afterChange} />
+          ) : (
+            <Card>
+              <CardContent className="flex gap-3 pt-6 text-sm text-muted-foreground">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  Monthly SIPs and fund categories need the
+                  <code className="mx-1 rounded bg-muted px-1">20261113120000_investment_sips</code>
+                  migration to be applied.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -269,14 +310,16 @@ export default function InvestmentsPage() {
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: INVESTMENT_ASSET_COLORS[h.asset_type] }} />
                               <p className="font-medium">{h.name}</p>
-                              <Badge variant="secondary">{INVESTMENT_ASSET_LABELS[h.asset_type]}</Badge>
+                              <Badge variant="secondary">
+                                {h.fund_category ? FUND_CATEGORY_LABELS[h.fund_category] : INVESTMENT_ASSET_LABELS[h.asset_type]}
+                              </Badge>
                               {h.symbol && <span className="text-xs text-muted-foreground">{h.symbol}</span>}
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {qty(s.quantity)} units · avg cost {formatCurrency(s.average_cost)} ·{" "}
+                              {qty(s.quantity)} units · avg cost {formatPrice(s.average_cost)} ·{" "}
                               {s.valued_at_cost
                                 ? "valued at cost (no price entered)"
-                                : `price ${formatCurrency(Number(h.current_price))}${h.valued_on ? ` on ${formatDate(h.valued_on)}` : ""}`}
+                                : `price ${formatPrice(Number(h.current_price))}${h.valued_on ? ` on ${formatDate(h.valued_on)}` : ""}`}
                             </p>
                           </div>
                           <div className="text-right">
@@ -289,7 +332,7 @@ export default function InvestmentsPage() {
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <Button size="sm" variant="outline" onClick={() => { setCashAccount(undefined); setTxnDialog({ holding: h, type: "buy" }); }}>Buy</Button>
+                          <Button size="sm" variant="outline" onClick={() => { setCashAccount(undefined); setEntryMode("amount"); setTxnDialog({ holding: h, type: "buy" }); }}>Buy</Button>
                           <Button size="sm" variant="outline" disabled={s.quantity <= 0} onClick={() => { setCashAccount(undefined); setTxnDialog({ holding: h, type: "sell" }); }}>Sell</Button>
                           <Button size="sm" variant="outline" onClick={() => setPriceDialog(h)}>
                             <Tag className="mr-1 h-3.5 w-3.5" /> Update value
@@ -326,7 +369,7 @@ export default function InvestmentsPage() {
                                     <td className="py-1.5">{formatDate(t.date)}</td>
                                     <td className="py-1.5">{TXN_LABELS[t.type]}</td>
                                     <td className="py-1.5 text-right">{qty(Number(t.quantity))}</td>
-                                    <td className="py-1.5 text-right">{formatCurrency(Number(t.price))}</td>
+                                    <td className="py-1.5 text-right">{formatPrice(Number(t.price))}</td>
                                     <td className="py-1.5 text-right">
                                       {t.type === "opening" ? "—" : `${t.type === "sell" ? "+" : "−"}${formatCurrency(cashAmount(t))}`}
                                     </td>
@@ -382,6 +425,23 @@ export default function InvestmentsPage() {
                 </div>
               </div>
 
+              {data?.sips_available && (
+                <div className="space-y-2">
+                  <Label>Fund category (optional)</Label>
+                  <Select name="fund_category" defaultValue={holdingDialog.editing?.fund_category || NO_CATEGORY}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue>{(v: string) => (v === NO_CATEGORY ? "Not a fund / not set" : FUND_CATEGORY_LABELS[v as Exclude<FundCategory, "">] ?? v)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_CATEGORY}>Not a fund / not set</SelectItem>
+                      {FUND_CATEGORIES.map((c) => (
+                        <SelectItem key={c} value={c}>{FUND_CATEGORY_LABELS[c]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               {!holdingDialog.editing && (
                 <div className="space-y-3 rounded-lg border p-3">
                   <div className="flex flex-wrap gap-4 text-sm">
@@ -394,7 +454,8 @@ export default function InvestmentsPage() {
                       I already own these units
                     </label>
                   </div>
-                  <TxnFields today={today} />
+                  {firstKind === "buy" && <EntryModeToggle mode={entryMode} onChange={setEntryMode} />}
+                  <TxnFields today={today} mode={firstKind === "buy" ? entryMode : "units"} />
                   {firstKind === "buy" ? (
                     <div className="space-y-2">
                       <Label>Paid from</Label>
@@ -403,7 +464,36 @@ export default function InvestmentsPage() {
                   ) : (
                     <p className="text-xs text-muted-foreground">No cash moves: use this for units bought earlier, including ones logged as an &quot;Investments&quot; expense.</p>
                   )}
-                  <p className="text-xs text-muted-foreground">Leave units empty to add the holding without a transaction.</p>
+                  <p className="text-xs text-muted-foreground">Leave the amount / units empty to add the holding without a transaction.</p>
+                </div>
+              )}
+
+              {!holdingDialog.editing && data?.sips_available && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={withSip} onChange={(e) => setWithSip(e.target.checked)} />
+                    I invest in this every month (SIP)
+                  </label>
+                  {withSip && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="new-sip-amount">SIP amount (₹)</Label>
+                        <Input id="new-sip-amount" name="sip_amount" type="number" step="any" min="1" required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="new-sip-day">Day of month</Label>
+                        <Input id="new-sip-day" name="sip_day" type="number" min="1" max="31" required defaultValue={5} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="new-sip-start">Started on</Label>
+                        <Input id="new-sip-start" name="sip_start" type="date" defaultValue={today} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Debited from</Label>
+                        <AccountSelect value={sipAccount ?? cashAccountId} onChange={setSipAccount} placeholder="Not tracked" className="w-full" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -433,7 +523,13 @@ export default function InvestmentsPage() {
           </DialogHeader>
           {txnDialog && (
             <form onSubmit={saveTxn} className="space-y-4">
-              <TxnFields today={today} required maxQuantity={txnDialog.type === "sell" ? txnDialog.holding.summary.quantity : undefined} />
+              {txnDialog.type === "buy" && <EntryModeToggle mode={entryMode} onChange={setEntryMode} />}
+              <TxnFields
+                today={today}
+                required
+                mode={txnDialog.type === "buy" ? entryMode : "units"}
+                maxQuantity={txnDialog.type === "sell" ? txnDialog.holding.summary.quantity : undefined}
+              />
               <div className="space-y-2">
                 <Label>{txnDialog.type === "sell" ? "Paid into" : "Paid from"}</Label>
                 <AccountSelect value={cashAccountId} onChange={setCashAccount} placeholder="Not tracked" className="w-full" />
@@ -482,24 +578,63 @@ export default function InvestmentsPage() {
   );
 }
 
-/** Date, units, price and fees: shared by the first purchase and the buy / sell form. */
-function TxnFields({ today, required = false, maxQuantity }: { today: string; required?: boolean; maxQuantity?: number }) {
+/** Choose how a buy is entered. */
+function EntryModeToggle({ mode, onChange }: { mode: "amount" | "units"; onChange: (m: "amount" | "units") => void }) {
+  return (
+    <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="Enter the buy as">
+      {(["amount", "units"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={mode === m}
+          onClick={() => onChange(m)}
+          className={cn("rounded px-2.5 py-1", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+        >
+          {m === "amount" ? "Amount + NAV" : "Units + price"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Date, size, price and fees: shared by the first purchase and the buy / sell form.
+ * "amount" mode asks for the rupees invested and the NAV; the server works out the units.
+ */
+function TxnFields({
+  today,
+  required = false,
+  maxQuantity,
+  mode = "units",
+}: {
+  today: string;
+  required?: boolean;
+  maxQuantity?: number;
+  mode?: "amount" | "units";
+}) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-2">
         <Label htmlFor="txn-date">Date</Label>
         <Input id="txn-date" name="date" type="date" required max={today} defaultValue={today} />
       </div>
+      {mode === "amount" ? (
+        <div className="space-y-2">
+          <Label htmlFor="txn-amount">Amount invested (₹)</Label>
+          <Input id="txn-amount" name="amount" type="number" step="any" min="1" required={required} />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="txn-qty">Units</Label>
+          <Input id="txn-qty" name="quantity" type="number" step="any" min="0.000001" max={maxQuantity} required={required} />
+        </div>
+      )}
       <div className="space-y-2">
-        <Label htmlFor="txn-qty">Units</Label>
-        <Input id="txn-qty" name="quantity" type="number" step="any" min="0.000001" max={maxQuantity} required={required} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="txn-price">Price per unit</Label>
+        <Label htmlFor="txn-price">{mode === "amount" ? "NAV / price per unit" : "Price per unit"}</Label>
         <Input id="txn-price" name="price" type="number" step="any" min="0" required={required} />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="txn-fees">Fees / charges</Label>
+        <Label htmlFor="txn-fees">{mode === "amount" ? "Stamp duty / charges" : "Fees / charges"}</Label>
         <Input id="txn-fees" name="fees" type="number" step="any" min="0" placeholder="0" />
       </div>
     </div>

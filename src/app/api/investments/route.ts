@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppZone } from "@/lib/dates";
 import { loadPortfolio } from "@/lib/investments";
-import { isMissingTable, parseHoldingInput, parseTransactionInput } from "@/lib/portfolio";
+import { isMissingTable, parseHoldingInput, parseSipInput, parseTransactionInput, transactionRow } from "@/lib/portfolio";
 
 const NOT_SET_UP = "Portfolio tracking needs the 20261110200100_investment_portfolio migration applied first";
 
@@ -32,6 +32,14 @@ export async function POST(request: NextRequest) {
   const holding = parseHoldingInput(body, { partial: false, today: todayInAppZone() });
   if ("error" in holding) return NextResponse.json({ error: holding.error }, { status: 400 });
 
+  // Optional monthly SIP into the new holding.
+  let sip = null;
+  if (body.sip) {
+    const parsedSip = parseSipInput({ ...body.sip, holding_id: "new" }, { partial: false, today: todayInAppZone() });
+    if ("error" in parsedSip) return NextResponse.json({ error: parsedSip.error }, { status: 400 });
+    sip = parsedSip.value;
+  }
+
   let first = null;
   if (body.first_transaction) {
     const parsed = parseTransactionInput(body.first_transaction);
@@ -52,11 +60,24 @@ export async function POST(request: NextRequest) {
   if (first) {
     const { error: txError } = await supabase
       .from("investment_transactions")
-      .insert({ ...first, holding_id: data.id, user_id: user.id });
+      .insert({ ...transactionRow(first), holding_id: data.id, user_id: user.id });
     if (txError) {
       // Don't leave an empty holding behind when its first transaction was refused.
       await supabase.from("investment_holdings").delete().eq("id", data.id).eq("user_id", user.id);
       return NextResponse.json({ error: txError.message }, { status: 400 });
+    }
+  }
+
+  if (sip) {
+    const { error: sipError } = await supabase
+      .from("investment_sips")
+      .insert({ ...sip, holding_id: data.id, user_id: user.id });
+    if (sipError) {
+      // The holding (and any first buy) is saved; report the SIP problem so it can be added again.
+      return NextResponse.json(
+        { data, warning: isMissingTable(sipError) ? "Holding added, but SIPs aren't set up yet" : `Holding added, but the SIP wasn't: ${sipError.message}` },
+        { status: 201 }
+      );
     }
   }
 

@@ -29,6 +29,8 @@ const respond = (status: number, body: unknown) =>
 
 const empty: PortfolioData = {
   available: true,
+  sips_available: true,
+  sips: [],
   holdings: [],
   summary: summarizePortfolio([]),
   legacy: { count: 0, total: 0 },

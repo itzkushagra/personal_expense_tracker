@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { PortfolioSummary } from "@/lib/portfolio";
-import { INVESTMENT_ASSET_COLORS, INVESTMENT_ASSET_LABELS } from "@/types";
+import { FUND_CATEGORY_COLORS, FUND_CATEGORY_LABELS, INVESTMENT_ASSET_COLORS, INVESTMENT_ASSET_LABELS } from "@/types";
 
 const pct = (n: number | null) => (n === null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`);
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${formatCurrency(Math.abs(n))}`;
@@ -64,6 +64,34 @@ export function PortfolioSummaryCards({ summary }: { summary: PortfolioSummary }
                   </span>
                   <span className="text-muted-foreground">
                     {formatCurrency(a.value)} · {a.pct.toFixed(0)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {summary.by_fund_category.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Funds by category</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" role="img" aria-label="Funds by category">
+              {summary.by_fund_category.map((c) => (
+                <div key={c.category} style={{ width: `${c.pct}%`, backgroundColor: FUND_CATEGORY_COLORS[c.category] }} />
+              ))}
+            </div>
+            <ul className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              {summary.by_fund_category.map((c) => (
+                <li key={c.category} className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: FUND_CATEGORY_COLORS[c.category] }} />
+                    {FUND_CATEGORY_LABELS[c.category]}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {formatCurrency(c.value)} · {c.pct.toFixed(0)}%
                   </span>
                 </li>
               ))}

@@ -376,11 +376,74 @@ export const INVESTMENT_ASSET_COLORS: Record<InvestmentAssetType, string> = {
   other: "#94a3b8",
 };
 
+/** Mutual fund / ETF category ("" when not set or not a fund). */
+export type FundCategory =
+  | ""
+  | "large_cap"
+  | "mid_cap"
+  | "small_cap"
+  | "large_mid_cap"
+  | "flexi_cap"
+  | "multi_cap"
+  | "focused"
+  | "value"
+  | "elss"
+  | "index"
+  | "sectoral"
+  | "international"
+  | "hybrid"
+  | "debt"
+  | "liquid"
+  | "gold_silver"
+  | "other";
+
+export const FUND_CATEGORY_LABELS: Record<Exclude<FundCategory, "">, string> = {
+  large_cap: "Large cap",
+  mid_cap: "Mid cap",
+  small_cap: "Small cap",
+  large_mid_cap: "Large & mid cap",
+  flexi_cap: "Flexi cap",
+  multi_cap: "Multi cap",
+  focused: "Focused",
+  value: "Value / contra",
+  elss: "ELSS (tax saver)",
+  index: "Index fund",
+  sectoral: "Sectoral / thematic",
+  international: "International",
+  hybrid: "Hybrid",
+  debt: "Debt",
+  liquid: "Liquid",
+  gold_silver: "Gold / silver fund",
+  other: "Other",
+};
+
+export const FUND_CATEGORY_COLORS: Record<Exclude<FundCategory, "">, string> = {
+  large_cap: "#2563eb",
+  mid_cap: "#7c3aed",
+  small_cap: "#db2777",
+  large_mid_cap: "#4f46e5",
+  flexi_cap: "#0891b2",
+  multi_cap: "#0d9488",
+  focused: "#9333ea",
+  value: "#b45309",
+  elss: "#16a34a",
+  index: "#0284c7",
+  sectoral: "#ea580c",
+  international: "#64748b",
+  hybrid: "#65a30d",
+  debt: "#475569",
+  liquid: "#94a3b8",
+  gold_silver: "#ca8a04",
+  other: "#a8a29e",
+};
+
 export interface InvestmentHolding {
   id: string;
   user_id: string;
   name: string;
   asset_type: InvestmentAssetType;
+  /** Fund category; "" when not set (older rows may not have it at all). */
+  fund_category?: FundCategory;
   symbol: string;
   /** Latest price per unit you entered; null = valued at cost. */
   current_price: number | null;
@@ -404,6 +467,24 @@ export interface InvestmentTransaction {
   fees: number;
   /** Cash account used; null for "opening" (already owned) or untracked cash. */
   account_id: string | null;
+  /** The SIP this buy is an instalment of. */
+  sip_id?: string | null;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A monthly SIP: a fixed amount into one holding on a day of the month. */
+export interface InvestmentSip {
+  id: string;
+  user_id: string;
+  holding_id: string;
+  amount: number;
+  /** 1–31; later than the month's last day means the last day. */
+  day_of_month: number;
+  account_id: string | null;
+  start_date: string;
+  is_active: boolean;
   note: string;
   created_at: string;
   updated_at: string;

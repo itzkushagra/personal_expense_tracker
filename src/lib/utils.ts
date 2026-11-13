@@ -15,6 +15,16 @@ export function formatCurrency(amount: number): string {
 }
 
 /** YYYY-MM-DD in the browser's local timezone (toISOString() would give UTC). */
+/** A per-unit price such as a fund NAV or share price: keeps up to 4 decimals (₹97.5, ₹87.6543). */
+export function formatPrice(amount: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(amount);
+}
+
 export function toLocalDateString(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

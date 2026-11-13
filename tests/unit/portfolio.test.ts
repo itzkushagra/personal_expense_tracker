@@ -142,7 +142,7 @@ describe("investments in the account ledger", () => {
 describe("request validation", () => {
   it("accepts a clean transaction and drops the account for opening positions", () => {
     expect(parseTransactionInput({ type: "buy", date: "2026-11-10", quantity: "2.5", price: "100", fees: "", account_id: "acc" })).toEqual({
-      value: { type: "buy", date: "2026-11-10", quantity: 2.5, price: 100, fees: 0, account_id: "acc", note: "" },
+      value: { type: "buy", date: "2026-11-10", quantity: 2.5, price: 100, fees: 0, account_id: "acc", note: "", sip_id: null },
     });
     const o = parseTransactionInput({ type: "opening", date: "2025-01-01", quantity: 1, price: 1, account_id: "acc" });
     expect("value" in o && o.value.account_id).toBeNull();

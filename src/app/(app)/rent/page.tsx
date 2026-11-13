@@ -25,6 +25,7 @@ import {
   Receipt,
   BellPlus,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import {
   type Rental,
@@ -35,6 +36,7 @@ import {
   outOfPocket,
 } from "@/types";
 import { AccountSelect, refreshAccounts, useAccounts } from "@/components/account-select";
+import { ExpenseDialog } from "@/components/expense-dialog";
 import { formatCurrency, formatDate, toLocalDateString, daysUntil } from "@/lib/utils";
 import { toast } from "sonner";
 import { startLoad } from "@/lib/load";
@@ -75,7 +77,10 @@ export default function RentPage() {
   const year = now.getFullYear();
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
   const monthLabel = now.toLocaleString("en-IN", { month: "long", year: "numeric" });
-  const { defaultId } = useAccounts();
+  const { defaultId, accounts } = useAccounts();
+  // A logged rent / maintenance expense being corrected (account, amount or date).
+  const [editingLogged, setEditingLogged] = useState<Expense | null>(null);
+  const [undoing, setUndoing] = useState<string | null>(null);
   const [payAccount, setPayAccount] = useState<string | null | undefined>(undefined);
   const rentBill = bills.find((b) => b.is_active && (b.category === "Rent" || /\brent\b/i.test(b.name)));
   const payAccountId = payAccount === undefined ? rentBill?.account_id ?? defaultId : payAccount;
@@ -201,6 +206,39 @@ export default function RentPage() {
       toast.error("Failed to log payment");
     } finally {
       setLogging(null);
+    }
+  }
+
+  /**
+   * Undo a rent or maintenance payment logged by mistake: deletes its expense and, for rent,
+   * reverses the matching payment on the Bills rent reminder so the reminder is due again.
+   */
+  async function undoLogged(expense: Expense, kind: "rent" | "maintenance") {
+    if (!confirm(`Undo ${formatCurrency(Number(expense.amount))} ${kind} logged on ${formatDate(expense.date)}? The expense is deleted${kind === "rent" && rentBill ? " and the rent reminder in Bills is marked unpaid again" : ""}.`)) return;
+    setUndoing(expense.id);
+    try {
+      const res = await fetch(`/api/expenses/${expense.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Couldn't delete the expense");
+      if (kind === "rent" && rentBill) {
+        // The rent page records the bill payment without its own expense; find this month's one.
+        const payRes = await fetch(`/api/bills/${rentBill.id}/payments`);
+        const payments: { id: string; paid_date: string; amount_paid: number; expense_id: string | null; reversed_at: string | null }[] =
+          (await payRes.json().catch(() => ({}))).data || [];
+        const match = payments.find(
+          (p) => !p.reversed_at && !p.expense_id && p.paid_date.startsWith(monthPrefix) && Number(p.amount_paid) === Number(expense.amount)
+        );
+        if (match) {
+          const rev = await fetch(`/api/bills/${rentBill.id}/payments?payment_id=${match.id}&reason=${encodeURIComponent("Rent log undone")}`, { method: "DELETE" });
+          if (!rev.ok) toast.error("Expense removed, but the Bills reminder couldn't be reset. Reverse it on the Bills page.");
+        }
+      }
+      toast.success(`${kind === "rent" ? "Rent" : "Maintenance"} log undone`);
+      refreshAccounts();
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't undo");
+    } finally {
+      setUndoing(null);
     }
   }
 
@@ -494,6 +532,13 @@ export default function RentPage() {
                 {isRentPaid ? "Logged" : "Log as paid"}
               </Button>
             </div>
+            <LoggedRows
+              items={rentExpenses.filter((e) => e.date.startsWith(monthPrefix))}
+              accountName={(id) => accounts.find((a) => a.id === id)?.name}
+              busyId={undoing}
+              onEdit={setEditingLogged}
+              onUndo={(e) => undoLogged(e, "rent")}
+            />
             {Number(rental.maintenance_charges) > 0 && (
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div>
@@ -505,6 +550,15 @@ export default function RentPage() {
                   {maintenancePaidThisMonth ? "Logged" : "Log as paid"}
                 </Button>
               </div>
+            )}
+            {Number(rental.maintenance_charges) > 0 && (
+              <LoggedRows
+                items={monthExpenses.filter((e) => e.category === "Home & Maintenance" && /maintenance/i.test(e.description))}
+                accountName={(id) => accounts.find((a) => a.id === id)?.name}
+                busyId={undoing}
+                onEdit={setEditingLogged}
+                onUndo={(e) => undoLogged(e, "maintenance")}
+              />
             )}
             {!hasRentBill && (
               <Button variant="ghost" size="sm" className="w-full" onClick={addRentReminder}>
@@ -605,6 +659,52 @@ export default function RentPage() {
       )}
 
       {dialog}
+      <ExpenseDialog
+        open={!!editingLogged}
+        onOpenChange={(o) => !o && setEditingLogged(null)}
+        expense={editingLogged}
+        onSaved={() => {
+          refreshAccounts();
+          fetchData();
+        }}
+      />
     </div>
+  );
+}
+
+/** What was logged this month, with the account it was paid from, and ways to fix it. */
+function LoggedRows({
+  items,
+  accountName,
+  busyId,
+  onEdit,
+  onUndo,
+}: {
+  items: Expense[];
+  accountName: (id: string | null) => string | undefined;
+  busyId: string | null;
+  onEdit: (e: Expense) => void;
+  onUndo: (e: Expense) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="-mt-1 space-y-1 pl-3 text-xs text-muted-foreground">
+      {items.map((e) => (
+        <li key={e.id} className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate">
+            {formatCurrency(Number(e.amount))} on {formatDate(e.date)} from{" "}
+            <span className="font-medium text-foreground">{accountName(e.account_id) ?? "no account"}</span>
+          </span>
+          <span className="flex shrink-0 gap-1">
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => onEdit(e)}>
+              <Pencil className="mr-1 h-3 w-3" /> Edit
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive" disabled={busyId === e.id} onClick={() => onUndo(e)}>
+              {busyId === e.id ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Undo2 className="mr-1 h-3 w-3" />} Undo
+            </Button>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

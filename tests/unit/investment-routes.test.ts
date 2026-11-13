@@ -104,6 +104,31 @@ describe("POST /api/investments/[id]/transactions", () => {
   });
 });
 
+describe("logging a SIP instalment", () => {
+  it("a second instalment in the same month is refused with 409", async () => {
+    results.investment_holdings = [{ data: { id: "h1" }, error: null }];
+    results.investment_transactions = [
+      { data: [], error: null },
+      { data: null, error: { code: "23505", message: "duplicate key value violates unique constraint" } },
+    ];
+    const res = await addTransaction(
+      req({ type: "buy", date: "2026-11-05", amount: 5000, price: 87.6543, sip_id: "sip-1", account_id: "acc" }),
+      { params }
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("This SIP is already logged for that month");
+    // Units were worked out from the amount; the SIP link was sent.
+    expect(inserts[0].row).toMatchObject({ quantity: 57.0423, price: 87.6543, sip_id: "sip-1" });
+  });
+
+  it("an ordinary buy doesn't send a sip_id column at all", async () => {
+    results.investment_holdings = [{ data: { id: "h1" }, error: null }];
+    results.investment_transactions = [{ data: [], error: null }, { data: { id: "t" }, error: null }];
+    await addTransaction(req({ type: "buy", date: "2026-11-05", quantity: 1, price: 10 }), { params });
+    expect(inserts[0].row).not.toHaveProperty("sip_id");
+  });
+});
+
 describe("DELETE /api/investments/[id]/transactions/[txId]", () => {
   const del = () =>
     deleteTransaction(new NextRequest("http://localhost/x", { method: "DELETE" }), {
