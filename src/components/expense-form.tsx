@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useEffectEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,9 +99,12 @@ export function ExpenseForm({
     setSplits(splits.map((r) => ({ ...r, amount: share ? String(share) : "" })));
   }
 
+  // Parse once the user stops speaking. An effect event so the latest handler runs
+  // without re-triggering the effect.
+  const onSpeechDone = useEffectEvent((text: string) => handleVoiceParse(text));
   useEffect(() => {
     if (transcript && !isListening) {
-      handleVoiceParse(transcript);
+      onSpeechDone(transcript);
     }
   }, [transcript, isListening]);
 
