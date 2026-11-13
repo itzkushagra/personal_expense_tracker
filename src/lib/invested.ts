@@ -34,6 +34,23 @@ export function investedByMonth(expenses: SavingsExpense[], purchases: Investmen
   return out;
 }
 
+/**
+ * "Investments" expenses the portfolio doesn't already account for. An expense is covered when
+ * the portfolio has a buy in the same month (the same SIP, logged both ways), or an "already
+ * owned" (opening) entry dated on or after it, which records units bought up to then.
+ */
+export function uncoveredInvestmentExpenses(
+  expenses: { date: string; amount: number | string }[],
+  transactions: { date: string; type: string }[]
+): { count: number; total: number } {
+  const buyMonths = new Set(transactions.filter((t) => t.type === "buy").map((t) => monthOf(t.date)));
+  const lastOpening = transactions
+    .filter((t) => t.type === "opening")
+    .reduce<string | null>((max, t) => (max === null || t.date > max ? t.date : max), null);
+  const left = expenses.filter((e) => !buyMonths.has(monthOf(e.date)) && !(lastOpening && e.date <= lastOpening));
+  return { count: left.length, total: Math.round(left.reduce((s, e) => s + Number(e.amount), 0) * 100) / 100 };
+}
+
 /** Total saved or invested across the given expenses and purchases. */
 export function investedTotal(expenses: SavingsExpense[], purchases: InvestmentPurchase[]): number {
   let total = 0;

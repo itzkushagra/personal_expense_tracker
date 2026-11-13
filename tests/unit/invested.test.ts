@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { investedByMonth, investedTotal } from "@/lib/invested";
+import { investedByMonth, investedTotal, uncoveredInvestmentExpenses } from "@/lib/invested";
 
 describe("money saved or invested per month", () => {
   const exp = (date: string, amount: number, category: string) => ({ date, amount, category });
@@ -34,6 +34,21 @@ describe("money saved or invested per month", () => {
 
   it("is zero with nothing saved", () => {
     expect(investedTotal([exp("2026-12-01", 500, "Rent")], [])).toBe(0);
+  });
+});
+
+describe("old Investments expenses the portfolio doesn't cover", () => {
+  const e = (date: string, amount: number) => ({ date, amount });
+  it("a month with a portfolio buy covers that month's SIP expense", () => {
+    const r = uncoveredInvestmentExpenses([e("2026-10-15", 5500), e("2024-05-10", 2000)], [{ date: "2026-10-15", type: "buy" }]);
+    expect(r).toEqual({ count: 1, total: 2000 });
+  });
+  it("units already owned cover everything bought up to their date", () => {
+    const tx = [{ date: "2025-06-30", type: "opening" }];
+    expect(uncoveredInvestmentExpenses([e("2025-01-15", 5000), e("2025-06-30", 5000), e("2025-07-15", 5000)], tx)).toEqual({ count: 1, total: 5000 });
+  });
+  it("with no portfolio, every Investments expense is counted", () => {
+    expect(uncoveredInvestmentExpenses([e("2025-01-15", 5000), e("2025-02-15", 5000)], [])).toEqual({ count: 2, total: 10000 });
   });
 });
 

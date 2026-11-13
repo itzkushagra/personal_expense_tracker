@@ -1,3 +1,4 @@
+import { uncoveredInvestmentExpenses } from "@/lib/invested";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InvestmentHolding, InvestmentSip, InvestmentTransaction } from "@/types";
 import { fetchAll } from "@/lib/ledger";
@@ -31,8 +32,9 @@ export interface PortfolioData {
   sips: SipWithStatus[];
   summary: PortfolioSummary;
   /**
-   * "Investments" expenses recorded before portfolio tracking. Their cash already left your
-   * accounts but which holding they bought can't be known, so they aren't turned into holdings.
+   * "Investments" expenses the portfolio doesn't account for: no buy in the same month and no
+   * "already owned" entry after them. Their cash already left your accounts but which holding
+   * they bought can't be known, so they aren't turned into holdings.
    */
   legacy: { count: number; total: number };
 }
@@ -60,9 +62,10 @@ export async function loadPortfolio(
     .eq("user_id", userId)
     .order("name");
 
-  const legacy = includeLegacy ? await legacyInvestmentExpenses(supabase, userId) : { count: 0, total: 0 };
+  const legacyRows = includeLegacy ? await investmentExpenses(supabase, userId) : [];
   if (error) {
     if (isMissingTable(error)) {
+      const legacy = uncoveredInvestmentExpenses(legacyRows, []);
       return { available: false, sips_available: false, holdings: [], sips: [], summary: EMPTY_SUMMARY, legacy };
     }
     throw new Error(error.message);
@@ -103,13 +106,12 @@ export async function loadPortfolio(
     holdings: rows,
     sips,
     summary: summarizePortfolio(rows),
-    legacy,
+    legacy: uncoveredInvestmentExpenses(legacyRows, txns),
   };
 }
 
-async function legacyInvestmentExpenses(supabase: SupabaseClient, userId: string) {
-  const rows = await fetchAll<{ amount: number }>((f, t) =>
-    supabase.from("expenses").select("amount").eq("user_id", userId).eq("category", "Investments").range(f, t)
+function investmentExpenses(supabase: SupabaseClient, userId: string) {
+  return fetchAll<{ date: string; amount: number }>((f, t) =>
+    supabase.from("expenses").select("date, amount").eq("user_id", userId).eq("category", "Investments").range(f, t)
   );
-  return { count: rows.length, total: Math.round(rows.reduce((s, r) => s + Number(r.amount), 0) * 100) / 100 };
 }

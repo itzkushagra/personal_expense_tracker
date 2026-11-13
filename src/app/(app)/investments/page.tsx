@@ -265,7 +265,7 @@ export default function InvestmentsPage() {
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <p className="text-muted-foreground">
               You have {data.legacy.count} &quot;Investments&quot; expense{data.legacy.count === 1 ? "" : "s"} totalling{" "}
-              {formatCurrency(data.legacy.total)} from before portfolio tracking. That money already left your accounts,
+              {formatCurrency(data.legacy.total)} that your portfolio doesn&apos;t account for. That money already left your accounts,
               but SpendWise can&apos;t tell what it bought, so it isn&apos;t shown as a holding or counted in net worth.
               To include it, add the holding and choose <strong>I already own these units</strong>, which records it
               without moving any cash again.
