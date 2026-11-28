@@ -210,7 +210,7 @@ export function MobileTabBar({ children }: { children: React.ReactNode }) {
     </Link>
   );
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex items-end border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-30 flex items-end border-t bg-background/95 pb-[calc(env(safe-area-inset-bottom)+var(--badge-space,0px))] backdrop-blur md:hidden">
       {mobileTabs.slice(0, 2).map(tab)}
       <div className="-mt-6 flex flex-1 justify-center">{children}</div>
       {mobileTabs.slice(2).map(tab)}

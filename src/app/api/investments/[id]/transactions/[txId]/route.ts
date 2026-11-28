@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionUser } from "@/lib/supabase/server";
 import type { InvestmentTransaction } from "@/types";
 import { validateTransactions } from "@/lib/portfolio";
 
@@ -10,7 +10,7 @@ export async function DELETE(
 ) {
   const { id, txId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: txns, error: loadError } = await supabase

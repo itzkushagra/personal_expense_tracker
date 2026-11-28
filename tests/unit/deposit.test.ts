@@ -23,9 +23,12 @@ let used: { amount: number }[] = [];
 let insertError: { code: string; message: string } | null = null;
 const inserted: Record<string, unknown>[] = [];
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/supabase/server", async (importOriginal) => ({
+  // The real getSessionUser, reading the mocked client below.
+  getSessionUser: (await importOriginal<typeof import("@/lib/supabase/server")>()).getSessionUser,
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user } }) },
+    // getSessionUser reads the verified token claims: sub is the user id.
+    auth: { getClaims: async () => ({ data: user ? { claims: { sub: user.id } } : null, error: null }) },
     from: (table: string) => {
       const b: Record<string, unknown> = {};
       for (const m of ["select", "eq"]) b[m] = () => b;

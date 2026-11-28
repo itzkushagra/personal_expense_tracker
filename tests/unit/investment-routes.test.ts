@@ -29,9 +29,12 @@ function builder(table: string) {
   return b;
 }
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/supabase/server", async (importOriginal) => ({
+  // The real getSessionUser, reading the mocked client below.
+  getSessionUser: (await importOriginal<typeof import("@/lib/supabase/server")>()).getSessionUser,
   createClient: async () => ({
-    auth: { getUser: async () => ({ data: { user } }) },
+    // getSessionUser reads the verified token claims: sub is the user id.
+    auth: { getClaims: async () => ({ data: user ? { claims: { sub: user.id } } : null, error: null }) },
     from: (table: string) => builder(table),
   }),
 }));

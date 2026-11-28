@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionUser } from "@/lib/supabase/server";
 import { EXPENSE_CATEGORIES } from "@/types";
 
 /** Bulk edit. Body: { ids: string[], category?, account_id? (null to unlink) } */
 export async function PATCH(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { ids, category, account_id } = await request.json();
@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest) {
 /** Bulk delete. Body: { ids: string[] } */
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { ids } = await request.json();

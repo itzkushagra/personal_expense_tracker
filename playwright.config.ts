@@ -52,7 +52,8 @@ export default defineConfig({
     ),
   ],
   webServer: {
-    command: "npm run dev",
+    // Start on E2E_PORT too, so another app already on port 3000 isn't tested by mistake.
+    command: `npm run dev -- --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: true,
     timeout: 120_000,

@@ -25,9 +25,10 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the session token locally (ES256 signing key) and refreshes it when it's
+  // about to expire, without a round trip to Supabase Auth on every page view.
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = claims?.claims?.sub ? claims.claims : null;
 
   const path = request.nextUrl.pathname;
   // Signed-out pages: signed-in visitors are sent to the dashboard instead.

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionUser } from "@/lib/supabase/server";
 import { todayInAppZone } from "@/lib/dates";
 import { loadPortfolio } from "@/lib/investments";
 import { writeErrorMessage } from "@/lib/record-only";
@@ -10,7 +10,7 @@ const NOT_SET_UP = "Portfolio tracking needs the 20261110200100_investment_portf
 /** All holdings with their transactions and figures, portfolio totals and legacy investment expenses. */
 export async function GET() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -26,7 +26,7 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();

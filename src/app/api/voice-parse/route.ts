@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionUser } from "@/lib/supabase/server";
 import { parseVoiceInput } from "@/lib/gemini";
 import { todayInAppZone } from "@/lib/dates";
 import { findSpokenDate, isUsableExpenseDate } from "@/lib/spoken-date";
@@ -61,9 +61,7 @@ function fallbackParse(text: string): { amount: number; description: string } {
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

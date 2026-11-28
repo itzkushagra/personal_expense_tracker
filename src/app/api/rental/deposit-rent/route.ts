@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getSessionUser } from "@/lib/supabase/server";
 import { todayInAppZone } from "@/lib/dates";
 import { isMissingColumn } from "@/lib/ledger";
 import { DEPOSIT_NOT_SET_UP, depositLeft, depositUsed, rentFromDeposit } from "@/lib/deposit";
@@ -13,7 +13,7 @@ const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getSessionUser(supabase);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
