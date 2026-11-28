@@ -415,7 +415,7 @@ export default function IncomePage() {
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Income" : "Add Income"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form key={editing?.id ?? "new"} onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               {[true, false].map((r) => (
                 <button

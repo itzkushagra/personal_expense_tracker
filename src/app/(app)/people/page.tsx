@@ -474,7 +474,7 @@ export default function PeopleLoansPage() {
             <DialogHeader>
               <DialogTitle>{editing ? `Edit: ${editing.person_name}` : "New Record"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4">
+            <form key={editing?.id ?? "new"} onSubmit={handleSave} className="space-y-4">
               {!editing && (
                 <div className="space-y-2">
                   <Label>What happened?</Label>

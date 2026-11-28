@@ -430,7 +430,7 @@ export default function AccountsPage() {
               <DialogHeader>
                 <DialogTitle>{editingAccount ? "Edit Account" : "Add Account"}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSaveAccount} className="space-y-4">
+              <form key={editingAccount?.id ?? "new"} onSubmit={handleSaveAccount} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="acc-name">Account Name</Label>
@@ -620,7 +620,7 @@ export default function AccountsPage() {
           <DialogHeader>
             <DialogTitle>{editingTransfer ? "Edit Transfer" : "New Transfer"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSaveTransfer} className="space-y-4">
+          <form key={editingTransfer?.id ?? "new"} onSubmit={handleSaveTransfer} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>From</Label>

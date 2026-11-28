@@ -154,7 +154,7 @@ export default function GoalsPage() {
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Goal" : "Create Goal"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4">
+            <form key={editing?.id ?? "new"} onSubmit={handleSave} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="goal-name">Goal Name</Label>
                 <Input id="goal-name" name="name" required defaultValue={editing?.name || ""} placeholder="e.g. Emergency Fund, Vacation" />
